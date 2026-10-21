@@ -1,0 +1,21 @@
+{
+  "name": "@switchyard/recovery-cli",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "bin": {
+    "switchyard-recover-azure": "./dist/cli.js"
+  },
+  "scripts": {
+    "prebuild": "npm run build --workspace @switchyard/core && npm run build --workspace @switchyard/recovery",
+    "build": "tsc -p tsconfig.build.json",
+    "pretest": "npm run prebuild",
+    "test": "tsc -p tsconfig.test.json && node --test .test-dist/test/*.test.js",
+    "pretypecheck": "npm run prebuild",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@switchyard/recovery": "0.0.0"
+  }
+}

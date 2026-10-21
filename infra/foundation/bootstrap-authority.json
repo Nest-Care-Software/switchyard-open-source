@@ -1,0 +1,85 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2018-05-01/subscriptionDeploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "metadata": {
+    "_generator": {
+      "name": "bicep",
+      "version": "0.46.1.21595",
+      "templateHash": "4139927149061276387"
+    }
+  },
+  "parameters": {
+    "reviewedPlanDigest": {
+      "type": "string",
+      "minLength": 64,
+      "maxLength": 64,
+      "metadata": {
+        "description": "Lowercase SHA-256 of the separately reviewed saved initial-control plan."
+      }
+    },
+    "controlTemplateDigest": {
+      "type": "string",
+      "minLength": 64,
+      "maxLength": 64,
+      "metadata": {
+        "description": "Lowercase SHA-256 of the separately reviewed initial control-foundation template."
+      }
+    }
+  },
+  "variables": {
+    "expectedSubscriptionId": "a0000000-0000-4000-8000-000000000001",
+    "expectedTenantId": "a0000000-0000-4000-8000-000000000002",
+    "stateResourceGroupName": "rg-switchyard-example-state",
+    "bootstrapIdentityName": "id-switchyard-infra-bootstrap-uksouth",
+    "initialControlCreatorRoleDefinitionName": "[guid(subscription().id, 'switchyard-initial-control-creator')]",
+    "reviewedPlanDigestWithoutHex": "[replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(parameters('reviewedPlanDigest'), '0', ''), '1', ''), '2', ''), '3', ''), '4', ''), '5', ''), '6', ''), '7', ''), '8', ''), '9', ''), 'a', ''), 'b', ''), 'c', ''), 'd', ''), 'e', ''), 'f', '')]",
+    "controlTemplateDigestWithoutHex": "[replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(parameters('controlTemplateDigest'), '0', ''), '1', ''), '2', ''), '3', ''), '4', ''), '5', ''), '6', ''), '7', ''), '8', ''), '9', ''), 'a', ''), 'b', ''), 'c', ''), 'd', ''), 'e', ''), 'f', '')]",
+    "activationAllowed": "[and(and(and(and(and(equals(subscription().subscriptionId, variables('expectedSubscriptionId')), equals(tenant().tenantId, variables('expectedTenantId'))), equals(length(parameters('reviewedPlanDigest')), 64)), empty(variables('reviewedPlanDigestWithoutHex'))), equals(length(parameters('controlTemplateDigest')), 64)), empty(variables('controlTemplateDigestWithoutHex')))]",
+    "assignmentName": "[guid(subscription().id, extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('stateResourceGroupName')), 'Microsoft.ManagedIdentity/userAssignedIdentities', variables('bootstrapIdentityName')), subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('initialControlCreatorRoleDefinitionName')), parameters('reviewedPlanDigest'), parameters('controlTemplateDigest'))]",
+    "assignmentDescription": "[format('Temporary Switchyard initial control authority for plan {0} and control template {1}.', parameters('reviewedPlanDigest'), parameters('controlTemplateDigest'))]"
+  },
+  "resources": [
+    {
+      "condition": "[variables('activationAllowed')]",
+      "type": "Microsoft.Authorization/roleAssignments",
+      "apiVersion": "2022-04-01",
+      "name": "[variables('assignmentName')]",
+      "properties": {
+        "description": "[variables('assignmentDescription')]",
+        "principalId": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('stateResourceGroupName')), 'Microsoft.ManagedIdentity/userAssignedIdentities', variables('bootstrapIdentityName')), '2023-01-31').principalId]",
+        "principalType": "ServicePrincipal",
+        "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('initialControlCreatorRoleDefinitionName'))]"
+      }
+    }
+  ],
+  "outputs": {
+    "activated": {
+      "type": "bool",
+      "value": "[variables('activationAllowed')]"
+    },
+    "assignmentId": {
+      "type": "string",
+      "value": "[if(variables('activationAllowed'), subscriptionResourceId('Microsoft.Authorization/roleAssignments', variables('assignmentName')), '')]"
+    },
+    "assignmentName": {
+      "type": "string",
+      "value": "[if(variables('activationAllowed'), variables('assignmentName'), '')]"
+    },
+    "bootstrapPrincipalId": {
+      "type": "string",
+      "value": "[if(variables('activationAllowed'), reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('stateResourceGroupName')), 'Microsoft.ManagedIdentity/userAssignedIdentities', variables('bootstrapIdentityName')), '2023-01-31').principalId, '')]"
+    },
+    "roleDefinitionId": {
+      "type": "string",
+      "value": "[if(variables('activationAllowed'), subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('initialControlCreatorRoleDefinitionName')), '')]"
+    },
+    "reviewedPlanDigest": {
+      "type": "string",
+      "value": "[if(variables('activationAllowed'), parameters('reviewedPlanDigest'), '')]"
+    },
+    "controlTemplateDigest": {
+      "type": "string",
+      "value": "[if(variables('activationAllowed'), parameters('controlTemplateDigest'), '')]"
+    }
+  }
+}

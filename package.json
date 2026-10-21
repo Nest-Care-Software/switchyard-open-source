@@ -1,0 +1,35 @@
+{
+  "name": "switchyard",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "engines": {
+    "node": ">=24.0.0 <25"
+  },
+  "packageManager": "npm@11.17.0",
+  "scripts": {
+    "actions:check": "bash scripts/check-actions.sh",
+    "build": "npm run build --workspaces --if-present",
+    "check": "npm run format:check && npm run lint && npm run typecheck && npm test && npm run scripts:check && npm run actions:check",
+    "format": "biome format --write .",
+    "format:check": "biome format .",
+    "lint": "biome lint .",
+    "function:bundle": "node scripts/build-control-function-bundle.mjs --check",
+    "package:check": "node scripts/check-package-contents.mjs && npm run function:bundle",
+    "runtime-app-boundary:check": "node scripts/check-runtime-app-boundary.mjs",
+    "runtime-app-boundary:test": "node scripts/test-runtime-app-boundary.mjs",
+    "scripts:check": "bash -n scripts/*.sh infra/assets/azure-runner/bootstrap.sh && node --check scripts/*.mjs .github/actions/allocate/*.mjs && node scripts/build-control-function-bundle.mjs --assets-only && node scripts/check-reporting-boundary.mjs && node scripts/check-controller-boundary.mjs && npm run runtime-app-boundary:test && npm run runtime-app-boundary:check",
+    "smoke:imports": "node scripts/smoke-imports.mjs",
+    "test": "node --test scripts/*.test.mjs && npm run test --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.5.10",
+    "@types/node": "24.13.3",
+    "typescript": "7.0.2"
+  }
+}

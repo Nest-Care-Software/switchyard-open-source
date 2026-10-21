@@ -1,0 +1,29 @@
+name: Owner infrastructure initial state, one time only
+
+on:
+  workflow_dispatch:
+    inputs:
+      commit_sha:
+        description: Exact lowercase commit SHA currently at main
+        required: true
+        type: string
+      acknowledgement:
+        description: Type INITIALISE EMPTY SWITCHYARD STATE
+        required: true
+        type: string
+
+permissions:
+  actions: read
+  contents: read
+  id-token: write
+
+jobs:
+  initialise-state:
+    name: Initialise the proved-empty Switchyard state once
+    uses: example-org/switchyard/.github/workflows/infrastructure-apply-engine.yml@5c9b286fcb5761a3fcf4b4c87882ec56103333e7
+    with:
+      artifact_id: "1"
+      commit_sha: ${{ inputs.commit_sha }}
+      destructive_acknowledgement: ${{ inputs.acknowledgement }}
+      plan_digest: "0000000000000000000000000000000000000000000000000000000000000000"
+      plan_run_id: "1"

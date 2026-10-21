@@ -1,0 +1,693 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2018-05-01/subscriptionDeploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "metadata": {
+    "_generator": {
+      "name": "bicep",
+      "version": "0.46.1.21595",
+      "templateHash": "4106075073374525039"
+    }
+  },
+  "parameters": {
+    "allocationId": {
+      "type": "string",
+      "minLength": 68,
+      "maxLength": 68,
+      "metadata": {
+        "description": "Unique allocation ID. It determines the controller-owned resource-group name and is immutable for the allocation."
+      }
+    },
+    "allocationResourceGroupName": {
+      "type": "string",
+      "minLength": 20,
+      "maxLength": 90,
+      "metadata": {
+        "description": "Exact deterministic controller-owned resource-group name derived from the immutable allocation ID before any billable side effect."
+      }
+    },
+    "physicalGeneration": {
+      "type": "int",
+      "defaultValue": 1,
+      "allowedValues": [
+        1
+      ],
+      "metadata": {
+        "description": "Physical VM generation within an allocation. The V1 pilot permits generation 1 only."
+      }
+    },
+    "githubRunId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64,
+      "metadata": {
+        "description": "GitHub run ID used only for safe operational correlation. It follows the shared 64-digit GitHub identity bound."
+      }
+    },
+    "allocationAcceptedAt": {
+      "type": "string",
+      "minLength": 24,
+      "maxLength": 24,
+      "metadata": {
+        "description": "Immutable allocation acceptance timestamp in Node canonical UTC form yyyy-MM-ddTHH:mm:ss.sssZ."
+      }
+    },
+    "originalCompleteBy": {
+      "type": "string",
+      "minLength": 24,
+      "maxLength": 24,
+      "metadata": {
+        "description": "Immutable absolute Compute Schedule CompleteBy deadline in Node canonical UTC form yyyy-MM-ddTHH:mm:ss.sssZ. Every physical generation uses this exact instant."
+      }
+    },
+    "deletionTarget": {
+      "type": "string",
+      "minLength": 24,
+      "maxLength": 24,
+      "metadata": {
+        "description": "Immutable absolute target for complete resource-group deletion in Node canonical UTC form yyyy-MM-ddTHH:mm:ss.sssZ. It does not guarantee that Azure asynchronous deletion finishes by this instant."
+      }
+    },
+    "allocationLifetimeMinutes": {
+      "type": "int",
+      "defaultValue": 45,
+      "allowedValues": [
+        45
+      ],
+      "metadata": {
+        "description": "Fixed V1 allocation lifetime. Callers cannot select or extend it."
+      }
+    },
+    "mappedJobTimeoutMinutes": {
+      "type": "int",
+      "minValue": 1,
+      "maxValue": 80,
+      "metadata": {
+        "description": "Literal timeout-minutes value from the independently verified approved workload mapping. Callers cannot supply this value directly."
+      }
+    },
+    "providerStopMarginMinutes": {
+      "type": "int",
+      "defaultValue": 5,
+      "allowedValues": [
+        5
+      ],
+      "metadata": {
+        "description": "Switchyard policy margin before the original compute deadline. This is policy, not an Azure provider guarantee."
+      }
+    },
+    "location": {
+      "type": "string",
+      "defaultValue": "uksouth",
+      "allowedValues": [
+        "uksouth"
+      ],
+      "metadata": {
+        "description": "V1 Azure region. Cross-region searching is not permitted."
+      }
+    },
+    "availabilityZone": {
+      "type": "string",
+      "allowedValues": [
+        "1",
+        "2",
+        "3"
+      ],
+      "metadata": {
+        "description": "Availability zone selected by the controller in its fixed retry order."
+      }
+    },
+    "vmSize": {
+      "type": "string",
+      "allowedValues": [
+        "Standard_D4ds_v6",
+        "Standard_D8ds_v6"
+      ],
+      "metadata": {
+        "description": "Capability-mapped Azure size. Callers never provide this value directly."
+      }
+    },
+    "imageVersion": {
+      "type": "string",
+      "minLength": 5,
+      "maxLength": 64,
+      "metadata": {
+        "description": "Exact Canonical Ubuntu 24.04 LTS Gen2 Marketplace image version resolved in UK South. latest is forbidden."
+      }
+    },
+    "sharedRunnerSubnetId": {
+      "type": "string",
+      "minLength": 20,
+      "metadata": {
+        "description": "Resource ID of the long-lived OpenTofu-owned runner subnet. Every other allocation network resource is created inside the allocation resource group."
+      }
+    },
+    "adminSshPublicKey": {
+      "type": "string",
+      "minLength": 32,
+      "metadata": {
+        "description": "Non-secret SSH public key required by the Azure Linux VM model. The allocation-owned NSG denies all inbound traffic, including SSH."
+      }
+    },
+    "nonSecretBootstrapCustomData": {
+      "type": "securestring",
+      "minLength": 1,
+      "metadata": {
+        "description": "Reviewed, non-secret bootstrap payload supplied by the controller. It must never contain tokens, JIT configuration, private keys or credentials. The secure decorator is defence in depth for deployment history, not permission to pass secrets through VM custom data."
+      }
+    },
+    "tags": {
+      "type": "object",
+      "defaultValue": {},
+      "metadata": {
+        "description": "Additional non-secret allocation tags. Mandatory lifecycle tags below take precedence."
+      }
+    }
+  },
+  "variables": {
+    "latestSafeStart": "[dateTimeAdd(parameters('originalCompleteBy'), format('-PT{0}M', add(parameters('mappedJobTimeoutMinutes'), parameters('providerStopMarginMinutes'))))]",
+    "expectedOriginalCompleteBy": "[dateTimeAdd(parameters('allocationAcceptedAt'), format('PT{0}M', sub(parameters('allocationLifetimeMinutes'), 5)))]",
+    "expectedDeletionTarget": "[dateTimeAdd(parameters('allocationAcceptedAt'), format('PT{0}M', parameters('allocationLifetimeMinutes')))]",
+    "latestSafeStartOffsetMinutes": "[sub(sub(sub(parameters('allocationLifetimeMinutes'), 5), parameters('mappedJobTimeoutMinutes')), parameters('providerStopMarginMinutes'))]",
+    "deadlineContractValid": "[and(and(equals(parameters('originalCompleteBy'), variables('expectedOriginalCompleteBy')), equals(parameters('deletionTarget'), variables('expectedDeletionTarget'))), greaterOrEquals(variables('latestSafeStartOffsetMinutes'), 0))]",
+    "allocationTags": "[union(parameters('tags'), createObject('allocationAcceptedAt', parameters('allocationAcceptedAt'), 'allocationId', parameters('allocationId'), 'allocationLifetimeMinutes', string(parameters('allocationLifetimeMinutes')), 'deletionTarget', parameters('deletionTarget'), 'githubRunId', parameters('githubRunId'), 'latestSafeStart', variables('latestSafeStart'), 'managedBy', 'switchyard-controller', 'mappedJobTimeoutMinutes', string(parameters('mappedJobTimeoutMinutes')), 'originalCompleteBy', parameters('originalCompleteBy'), 'providerStopMarginMinutes', string(parameters('providerStopMarginMinutes')), 'system', 'switchyard'))]"
+  },
+  "resources": [
+    {
+      "type": "Microsoft.Resources/resourceGroups",
+      "apiVersion": "2025-04-01",
+      "name": "[parameters('allocationResourceGroupName')]",
+      "location": "[parameters('location')]",
+      "tags": "[variables('allocationTags')]"
+    },
+    {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "[format('switchyard-allocation-{0}-g{1}', substring(parameters('allocationId'), 4, 20), parameters('physicalGeneration'))]",
+      "resourceGroup": "[parameters('allocationResourceGroupName')]",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "adminSshPublicKey": {
+            "value": "[parameters('adminSshPublicKey')]"
+          },
+          "allocationId": {
+            "value": "[parameters('allocationId')]"
+          },
+          "allocationTags": {
+            "value": "[variables('allocationTags')]"
+          },
+          "availabilityZone": {
+            "value": "[parameters('availabilityZone')]"
+          },
+          "deletionTarget": {
+            "value": "[parameters('deletionTarget')]"
+          },
+          "deadlineContractValid": {
+            "value": "[variables('deadlineContractValid')]"
+          },
+          "imageVersion": {
+            "value": "[parameters('imageVersion')]"
+          },
+          "latestSafeStart": {
+            "value": "[variables('latestSafeStart')]"
+          },
+          "location": {
+            "value": "[parameters('location')]"
+          },
+          "mappedJobTimeoutMinutes": {
+            "value": "[parameters('mappedJobTimeoutMinutes')]"
+          },
+          "nonSecretBootstrapCustomData": {
+            "value": "[parameters('nonSecretBootstrapCustomData')]"
+          },
+          "originalCompleteBy": {
+            "value": "[parameters('originalCompleteBy')]"
+          },
+          "physicalGeneration": {
+            "value": "[parameters('physicalGeneration')]"
+          },
+          "providerStopMarginMinutes": {
+            "value": "[parameters('providerStopMarginMinutes')]"
+          },
+          "sharedRunnerSubnetId": {
+            "value": "[parameters('sharedRunnerSubnetId')]"
+          },
+          "vmSize": {
+            "value": "[parameters('vmSize')]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.46.1.21595",
+              "templateHash": "14170850625807764416"
+            }
+          },
+          "parameters": {
+            "allocationId": {
+              "type": "string"
+            },
+            "physicalGeneration": {
+              "type": "int"
+            },
+            "originalCompleteBy": {
+              "type": "string"
+            },
+            "deletionTarget": {
+              "type": "string"
+            },
+            "latestSafeStart": {
+              "type": "string"
+            },
+            "deadlineContractValid": {
+              "type": "bool",
+              "allowedValues": [
+                true
+              ]
+            },
+            "mappedJobTimeoutMinutes": {
+              "type": "int"
+            },
+            "providerStopMarginMinutes": {
+              "type": "int"
+            },
+            "location": {
+              "type": "string"
+            },
+            "availabilityZone": {
+              "type": "string"
+            },
+            "vmSize": {
+              "type": "string"
+            },
+            "imageVersion": {
+              "type": "string"
+            },
+            "sharedRunnerSubnetId": {
+              "type": "string"
+            },
+            "adminSshPublicKey": {
+              "type": "string"
+            },
+            "nonSecretBootstrapCustomData": {
+              "type": "securestring"
+            },
+            "allocationTags": {
+              "type": "object"
+            }
+          },
+          "variables": {
+            "allocationSuffix": "[substring(parameters('allocationId'), 4, 20)]",
+            "physicalGenerationId": "[format('{0}:g{1}', parameters('allocationId'), parameters('physicalGeneration'))]",
+            "vmName": "[format('swy-{0}-g{1}', variables('allocationSuffix'), parameters('physicalGeneration'))]",
+            "networkSecurityGroupName": "[format('nsg-{0}', variables('vmName'))]",
+            "exactImageVersion": "[if(equals(toLower(parameters('imageVersion')), 'latest'), 'INVALID-LATEST-IS-FORBIDDEN', parameters('imageVersion'))]",
+            "generationTags": "[union(parameters('allocationTags'), createObject('deadlineContractValidated', string(parameters('deadlineContractValid')), 'deletionTarget', parameters('deletionTarget'), 'latestSafeStart', parameters('latestSafeStart'), 'originalCompleteBy', parameters('originalCompleteBy'), 'physicalGeneration', string(parameters('physicalGeneration')), 'physicalGenerationId', variables('physicalGenerationId')))]"
+          },
+          "resources": [
+            {
+              "type": "Microsoft.Network/networkSecurityGroups",
+              "apiVersion": "2025-01-01",
+              "name": "[variables('networkSecurityGroupName')]",
+              "location": "[parameters('location')]",
+              "properties": {
+                "securityRules": [
+                  {
+                    "name": "DenyAllInbound",
+                    "properties": {
+                      "access": "Deny",
+                      "destinationAddressPrefix": "*",
+                      "destinationPortRange": "*",
+                      "direction": "Inbound",
+                      "priority": 4096,
+                      "protocol": "*",
+                      "sourceAddressPrefix": "*",
+                      "sourcePortRange": "*"
+                    }
+                  },
+                  {
+                    "name": "AllowAzurePlatformDnsUdp",
+                    "properties": {
+                      "access": "Allow",
+                      "destinationAddressPrefix": "AzurePlatformDNS",
+                      "destinationPortRange": "53",
+                      "direction": "Outbound",
+                      "priority": 100,
+                      "protocol": "Udp",
+                      "sourceAddressPrefix": "VirtualNetwork",
+                      "sourcePortRange": "*"
+                    }
+                  },
+                  {
+                    "name": "AllowAzurePlatformDnsTcp",
+                    "properties": {
+                      "access": "Allow",
+                      "destinationAddressPrefix": "AzurePlatformDNS",
+                      "destinationPortRange": "53",
+                      "direction": "Outbound",
+                      "priority": 110,
+                      "protocol": "Tcp",
+                      "sourceAddressPrefix": "VirtualNetwork",
+                      "sourcePortRange": "*"
+                    }
+                  },
+                  {
+                    "name": "AllowAzurePlatformImds",
+                    "properties": {
+                      "access": "Allow",
+                      "destinationAddressPrefix": "AzurePlatformIMDS",
+                      "destinationPortRange": "80",
+                      "direction": "Outbound",
+                      "priority": 120,
+                      "protocol": "Tcp",
+                      "sourceAddressPrefix": "VirtualNetwork",
+                      "sourcePortRange": "*"
+                    }
+                  },
+                  {
+                    "name": "AllowAzureWireServer",
+                    "properties": {
+                      "access": "Allow",
+                      "destinationAddressPrefix": "168.63.129.16",
+                      "destinationPortRanges": [
+                        "80",
+                        "32526"
+                      ],
+                      "direction": "Outbound",
+                      "priority": 130,
+                      "protocol": "Tcp",
+                      "sourceAddressPrefix": "VirtualNetwork",
+                      "sourcePortRange": "*"
+                    }
+                  },
+                  {
+                    "name": "AllowHttps",
+                    "properties": {
+                      "access": "Allow",
+                      "destinationAddressPrefix": "Internet",
+                      "destinationPortRange": "443",
+                      "direction": "Outbound",
+                      "priority": 140,
+                      "protocol": "Tcp",
+                      "sourceAddressPrefix": "VirtualNetwork",
+                      "sourcePortRange": "*"
+                    }
+                  },
+                  {
+                    "name": "DenyAllOutbound",
+                    "properties": {
+                      "access": "Deny",
+                      "destinationAddressPrefix": "*",
+                      "destinationPortRange": "*",
+                      "direction": "Outbound",
+                      "priority": 4096,
+                      "protocol": "*",
+                      "sourceAddressPrefix": "*",
+                      "sourcePortRange": "*"
+                    }
+                  }
+                ]
+              },
+              "tags": "[variables('generationTags')]"
+            },
+            {
+              "type": "Microsoft.Network/publicIPAddresses",
+              "apiVersion": "2025-01-01",
+              "name": "[format('pip-{0}', variables('vmName'))]",
+              "location": "[parameters('location')]",
+              "zones": [
+                "[parameters('availabilityZone')]"
+              ],
+              "sku": {
+                "name": "Standard",
+                "tier": "Regional"
+              },
+              "properties": {
+                "deleteOption": "Delete",
+                "idleTimeoutInMinutes": 4,
+                "publicIPAddressVersion": "IPv4",
+                "publicIPAllocationMethod": "Static"
+              },
+              "tags": "[variables('generationTags')]"
+            },
+            {
+              "type": "Microsoft.Network/networkInterfaces",
+              "apiVersion": "2025-01-01",
+              "name": "[format('nic-{0}', variables('vmName'))]",
+              "location": "[parameters('location')]",
+              "properties": {
+                "enableAcceleratedNetworking": true,
+                "networkSecurityGroup": {
+                  "id": "[resourceId('Microsoft.Network/networkSecurityGroups', variables('networkSecurityGroupName'))]"
+                },
+                "ipConfigurations": [
+                  {
+                    "name": "primary",
+                    "properties": {
+                      "primary": true,
+                      "privateIPAllocationMethod": "Dynamic",
+                      "subnet": {
+                        "id": "[parameters('sharedRunnerSubnetId')]"
+                      },
+                      "publicIPAddress": {
+                        "id": "[resourceId('Microsoft.Network/publicIPAddresses', format('pip-{0}', variables('vmName')))]",
+                        "properties": {
+                          "deleteOption": "Delete"
+                        }
+                      }
+                    }
+                  }
+                ]
+              },
+              "tags": "[variables('generationTags')]",
+              "dependsOn": [
+                "[resourceId('Microsoft.Network/networkSecurityGroups', variables('networkSecurityGroupName'))]",
+                "[resourceId('Microsoft.Network/publicIPAddresses', format('pip-{0}', variables('vmName')))]"
+              ]
+            },
+            {
+              "type": "Microsoft.Compute/virtualMachines",
+              "apiVersion": "2025-04-01",
+              "name": "[variables('vmName')]",
+              "location": "[parameters('location')]",
+              "zones": [
+                "[parameters('availabilityZone')]"
+              ],
+              "properties": {
+                "hardwareProfile": {
+                  "vmSize": "[parameters('vmSize')]"
+                },
+                "networkProfile": {
+                  "networkInterfaces": [
+                    {
+                      "id": "[resourceId('Microsoft.Network/networkInterfaces', format('nic-{0}', variables('vmName')))]",
+                      "properties": {
+                        "deleteOption": "Delete",
+                        "primary": true
+                      }
+                    }
+                  ]
+                },
+                "osProfile": {
+                  "computerName": "[variables('vmName')]",
+                  "adminUsername": "switchyard",
+                  "customData": "[base64(parameters('nonSecretBootstrapCustomData'))]",
+                  "linuxConfiguration": {
+                    "disablePasswordAuthentication": true,
+                    "provisionVMAgent": true,
+                    "ssh": {
+                      "publicKeys": [
+                        {
+                          "path": "/home/switchyard/.ssh/authorized_keys",
+                          "keyData": "[parameters('adminSshPublicKey')]"
+                        }
+                      ]
+                    }
+                  }
+                },
+                "storageProfile": {
+                  "imageReference": {
+                    "publisher": "Canonical",
+                    "offer": "ubuntu-24_04-lts",
+                    "sku": "server",
+                    "version": "[variables('exactImageVersion')]"
+                  },
+                  "osDisk": {
+                    "name": "[format('osdisk-{0}', variables('vmName'))]",
+                    "caching": "ReadWrite",
+                    "createOption": "FromImage",
+                    "deleteOption": "Delete",
+                    "diskSizeGB": 64,
+                    "managedDisk": {
+                      "storageAccountType": "StandardSSD_LRS"
+                    }
+                  }
+                },
+                "securityProfile": {
+                  "securityType": "TrustedLaunch",
+                  "uefiSettings": {
+                    "secureBootEnabled": true,
+                    "vTpmEnabled": true
+                  }
+                },
+                "diagnosticsProfile": {
+                  "bootDiagnostics": {
+                    "enabled": true
+                  }
+                }
+              },
+              "tags": "[variables('generationTags')]",
+              "dependsOn": [
+                "[resourceId('Microsoft.Network/networkInterfaces', format('nic-{0}', variables('vmName')))]"
+              ]
+            }
+          ],
+          "outputs": {
+            "physicalGeneration": {
+              "type": "int",
+              "value": "[parameters('physicalGeneration')]"
+            },
+            "physicalGenerationId": {
+              "type": "string",
+              "value": "[variables('physicalGenerationId')]"
+            },
+            "virtualMachineId": {
+              "type": "string",
+              "value": "[resourceId('Microsoft.Compute/virtualMachines', variables('vmName'))]"
+            },
+            "virtualMachineName": {
+              "type": "string",
+              "value": "[variables('vmName')]"
+            },
+            "networkSecurityGroupId": {
+              "type": "string",
+              "value": "[resourceId('Microsoft.Network/networkSecurityGroups', variables('networkSecurityGroupName'))]"
+            },
+            "networkInterfaceId": {
+              "type": "string",
+              "value": "[resourceId('Microsoft.Network/networkInterfaces', format('nic-{0}', variables('vmName')))]"
+            },
+            "publicIpAddressId": {
+              "type": "string",
+              "value": "[resourceId('Microsoft.Network/publicIPAddresses', format('pip-{0}', variables('vmName')))]"
+            },
+            "computeScheduleTarget": {
+              "type": "object",
+              "value": {
+                "deadlineType": "CompleteBy",
+                "originalCompleteBy": "[parameters('originalCompleteBy')]",
+                "physicalGeneration": "[parameters('physicalGeneration')]",
+                "physicalGenerationId": "[variables('physicalGenerationId')]",
+                "requiresFreshAcceptedOperation": true,
+                "virtualMachineId": "[resourceId('Microsoft.Compute/virtualMachines', variables('vmName'))]"
+              }
+            },
+            "deadlineContract": {
+              "type": "object",
+              "value": {
+                "deletionTarget": "[parameters('deletionTarget')]",
+                "latestSafeStart": "[parameters('latestSafeStart')]",
+                "mappedJobTimeoutMinutes": "[parameters('mappedJobTimeoutMinutes')]",
+                "originalCompleteBy": "[parameters('originalCompleteBy')]",
+                "providerStopMarginMinutes": "[parameters('providerStopMarginMinutes')]"
+              }
+            },
+            "imageReference": {
+              "type": "object",
+              "value": {
+                "publisher": "Canonical",
+                "offer": "ubuntu-24_04-lts",
+                "sku": "server",
+                "version": "[variables('exactImageVersion')]"
+              }
+            }
+          }
+        }
+      },
+      "dependsOn": [
+        "[subscriptionResourceId('Microsoft.Resources/resourceGroups', parameters('allocationResourceGroupName'))]"
+      ]
+    }
+  ],
+  "outputs": {
+    "allocationAcceptedAt": {
+      "type": "string",
+      "value": "[parameters('allocationAcceptedAt')]"
+    },
+    "allocationResourceGroupId": {
+      "type": "string",
+      "value": "[subscriptionResourceId('Microsoft.Resources/resourceGroups', parameters('allocationResourceGroupName'))]"
+    },
+    "allocationResourceGroupName": {
+      "type": "string",
+      "value": "[parameters('allocationResourceGroupName')]"
+    },
+    "deletionTarget": {
+      "type": "string",
+      "value": "[parameters('deletionTarget')]"
+    },
+    "latestSafeStart": {
+      "type": "string",
+      "value": "[variables('latestSafeStart')]"
+    },
+    "originalCompleteBy": {
+      "type": "string",
+      "value": "[parameters('originalCompleteBy')]"
+    },
+    "physicalGeneration": {
+      "type": "int",
+      "value": "[parameters('physicalGeneration')]"
+    },
+    "physicalGenerationId": {
+      "type": "string",
+      "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, parameters('allocationResourceGroupName')), 'Microsoft.Resources/deployments', format('switchyard-allocation-{0}-g{1}', substring(parameters('allocationId'), 4, 20), parameters('physicalGeneration'))), '2025-04-01').outputs.physicalGenerationId.value]"
+    },
+    "virtualMachineId": {
+      "type": "string",
+      "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, parameters('allocationResourceGroupName')), 'Microsoft.Resources/deployments', format('switchyard-allocation-{0}-g{1}', substring(parameters('allocationId'), 4, 20), parameters('physicalGeneration'))), '2025-04-01').outputs.virtualMachineId.value]"
+    },
+    "virtualMachineName": {
+      "type": "string",
+      "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, parameters('allocationResourceGroupName')), 'Microsoft.Resources/deployments', format('switchyard-allocation-{0}-g{1}', substring(parameters('allocationId'), 4, 20), parameters('physicalGeneration'))), '2025-04-01').outputs.virtualMachineName.value]"
+    },
+    "networkSecurityGroupId": {
+      "type": "string",
+      "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, parameters('allocationResourceGroupName')), 'Microsoft.Resources/deployments', format('switchyard-allocation-{0}-g{1}', substring(parameters('allocationId'), 4, 20), parameters('physicalGeneration'))), '2025-04-01').outputs.networkSecurityGroupId.value]"
+    },
+    "networkInterfaceId": {
+      "type": "string",
+      "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, parameters('allocationResourceGroupName')), 'Microsoft.Resources/deployments', format('switchyard-allocation-{0}-g{1}', substring(parameters('allocationId'), 4, 20), parameters('physicalGeneration'))), '2025-04-01').outputs.networkInterfaceId.value]"
+    },
+    "publicIpAddressId": {
+      "type": "string",
+      "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, parameters('allocationResourceGroupName')), 'Microsoft.Resources/deployments', format('switchyard-allocation-{0}-g{1}', substring(parameters('allocationId'), 4, 20), parameters('physicalGeneration'))), '2025-04-01').outputs.publicIpAddressId.value]"
+    },
+    "computeScheduleTarget": {
+      "type": "object",
+      "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, parameters('allocationResourceGroupName')), 'Microsoft.Resources/deployments', format('switchyard-allocation-{0}-g{1}', substring(parameters('allocationId'), 4, 20), parameters('physicalGeneration'))), '2025-04-01').outputs.computeScheduleTarget.value]"
+    },
+    "deadlineContract": {
+      "type": "object",
+      "value": {
+        "allocationAcceptedAt": "[parameters('allocationAcceptedAt')]",
+        "allocationLifetimeMinutes": "[parameters('allocationLifetimeMinutes')]",
+        "deletionTarget": "[parameters('deletionTarget')]",
+        "latestSafeStart": "[variables('latestSafeStart')]",
+        "latestSafeStartOffsetMinutes": "[variables('latestSafeStartOffsetMinutes')]",
+        "mappedJobTimeoutMinutes": "[parameters('mappedJobTimeoutMinutes')]",
+        "originalCompleteBy": "[parameters('originalCompleteBy')]",
+        "providerStopMarginMinutes": "[parameters('providerStopMarginMinutes')]"
+      }
+    },
+    "imageReference": {
+      "type": "object",
+      "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, parameters('allocationResourceGroupName')), 'Microsoft.Resources/deployments', format('switchyard-allocation-{0}-g{1}', substring(parameters('allocationId'), 4, 20), parameters('physicalGeneration'))), '2025-04-01').outputs.imageReference.value]"
+    }
+  }
+}

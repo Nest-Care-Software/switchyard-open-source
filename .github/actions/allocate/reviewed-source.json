@@ -1,0 +1,7 @@
+{
+  "commitSha": "962f025fba27840b60e0fc06c5b5a7160451e82d",
+  "files": {
+    ".github/actions/allocate/action.yml": "d65098a856c4a1264b89202fe95f871f94e8e46d88cc8b585792f1aa71ee721b",
+    ".github/actions/allocate/index.mjs": "d49adb2b81506eee59883cd4467f5567f0407f6427be2ed2f914e6395a29f44e"
+  }
+}

@@ -1,0 +1,27 @@
+{
+  "name": "@switchyard/control-function",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/entry.js",
+  "scripts": {
+    "prebuild": "npm run build --workspace @switchyard/core && npm run build --workspace @switchyard/controller && npm run build --workspace @switchyard/github && npm run build --workspace @switchyard/azure-ledger && npm run build --workspace @switchyard/azure-worker && npm run build --workspace @switchyard/reconciler",
+    "build": "tsc -p tsconfig.build.json",
+    "pretest": "npm run prebuild",
+    "test": "tsc -p tsconfig.test.json && node --test .test-dist/test/*.test.js",
+    "pretypecheck": "npm run prebuild",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@azure/core-auth": "1.11.0",
+    "@azure/functions": "4.16.2",
+    "@azure/identity": "4.13.2",
+    "@azure/storage-queue": "12.31.0",
+    "@switchyard/azure-ledger": "0.0.0",
+    "@switchyard/azure-worker": "0.0.0",
+    "@switchyard/controller": "0.0.0",
+    "@switchyard/core": "0.0.0",
+    "@switchyard/github": "0.0.0",
+    "@switchyard/reconciler": "0.0.0"
+  }
+}

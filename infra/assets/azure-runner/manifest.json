@@ -1,0 +1,8 @@
+{
+  "architecture": "x64",
+  "bootstrap_sha256": "a74d13754210dc915e6110e5e53ae6e6e6532e3fc6a88ad4db6aecf46e1ffe9c",
+  "operating_system": "Canonical Ubuntu 24.04 LTS Gen2",
+  "runner_archive_sha256": "04cf0be1aff4c3ec3554466c39124ca250e3effd8873bb7e8d68535aa9505d5d",
+  "runner_archive_url": "https://github.com/actions/runner/releases/download/v2.336.0/actions-runner-linux-x64-2.336.0.tar.gz",
+  "runner_version": "2.336.0"
+}

@@ -1,0 +1,20 @@
+azure-cli                         2.89.1
+core                              2.89.1
+telemetry                          1.1.0
+
+Extensions:
+
+Dependencies:
+msal                              1.34.0
+azure-mgmt-resource               23.3.0
+
+Python location '/usr/bin/python3'
+Config directory '/home/example/.azure'
+Extensions directory '/home/example/.azure/cliextensions'
+Extensions system directory '/usr/lib/python3.12/site-packages/azure-cli-extensions'
+
+Python (Linux) 3.12.9
+
+Legal docs and information: aka.ms/AzureCliLegal
+
+Your CLI is up-to-date.

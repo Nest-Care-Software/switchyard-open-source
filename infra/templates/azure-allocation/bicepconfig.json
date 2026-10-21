@@ -1,0 +1,29 @@
+{
+  "analyzers": {
+    "core": {
+      "enabled": true,
+      "verbose": false,
+      "rules": {
+        "adminusername-should-not-be-literal": {
+          "level": "off"
+        },
+        "no-hardcoded-env-urls": {
+          "level": "error"
+        },
+        "no-unnecessary-dependson": {
+          "level": "error"
+        },
+        "outputs-should-not-contain-secrets": {
+          "level": "error"
+        },
+        "secure-parameter-default": {
+          "level": "error"
+        },
+        "use-recent-api-versions": {
+          "level": "error",
+          "maxAllowedAgeInDays": 730
+        }
+      }
+    }
+  }
+}

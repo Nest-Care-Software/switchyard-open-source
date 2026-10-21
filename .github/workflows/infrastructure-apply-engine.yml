@@ -1,0 +1,120 @@
+name: Infrastructure apply engine (unreachable)
+
+on:
+  workflow_call:
+    inputs:
+      artifact_id:
+        description: Exact immutable GitHub plan artifact ID
+        required: true
+        type: string
+      commit_sha:
+        description: Exact lowercase commit SHA currently at main
+        required: true
+        type: string
+      destructive_acknowledgement:
+        description: Exact digest-bound acknowledgement when the plan is destructive
+        required: true
+        type: string
+      plan_digest:
+        description: Full lowercase SHA-256 digest of the opaque saved plan
+        required: true
+        type: string
+      plan_run_id:
+        description: Exact first-attempt plan workflow run ID
+        required: true
+        type: string
+
+permissions:
+  actions: read
+  contents: read
+  id-token: write
+
+concurrency:
+  group: switchyard-infrastructure-apply
+  cancel-in-progress: false
+
+jobs:
+  apply-plan:
+    name: Apply the exact approved saved plan
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+
+    steps:
+      - name: Check out the reviewed commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Validate immutable workflow inputs
+        shell: bash
+        env:
+          ARTIFACT_ID: ${{ inputs.artifact_id }}
+          CALLED_WORKFLOW_FILE_PATH: ${{ job.workflow_file_path }}
+          CALLED_WORKFLOW_REF: ${{ job.workflow_ref }}
+          CALLED_WORKFLOW_REPOSITORY: ${{ job.workflow_repository }}
+          CALLED_WORKFLOW_SHA: ${{ job.workflow_sha }}
+          COMMIT_SHA: ${{ inputs.commit_sha }}
+          CURRENT_SHA: ${{ github.sha }}
+          PLAN_DIGEST: ${{ inputs.plan_digest }}
+          PLAN_RUN_ID: ${{ inputs.plan_run_id }}
+          REPOSITORY_ID: ${{ github.repository_id }}
+          REPOSITORY_OWNER_ID: ${{ github.repository_owner_id }}
+          RUN_ATTEMPT: ${{ github.run_attempt }}
+        run: |
+          set -euo pipefail
+          test "${REPOSITORY_ID}" = "900000003"
+          test "${REPOSITORY_OWNER_ID}" = "900000004"
+          test "${RUN_ATTEMPT}" = "1"
+          [[ "${ARTIFACT_ID}" =~ ^[1-9][0-9]{0,19}$ ]]
+          [[ "${PLAN_RUN_ID}" =~ ^[1-9][0-9]{0,19}$ ]]
+          [[ "${COMMIT_SHA}" =~ ^[0-9a-f]{40}$ ]]
+          test "${COMMIT_SHA}" = "${CURRENT_SHA}"
+          [[ "${PLAN_DIGEST}" =~ ^[0-9a-f]{64}$ ]]
+          test "${CALLED_WORKFLOW_REPOSITORY}" = "example-org/switchyard"
+          test "${CALLED_WORKFLOW_FILE_PATH}" = ".github/workflows/infrastructure-apply-engine.yml"
+          [[ "${CALLED_WORKFLOW_SHA}" =~ ^[0-9a-f]{40}$ ]]
+          test "${CALLED_WORKFLOW_REF}" = "${CALLED_WORKFLOW_REPOSITORY}/${CALLED_WORKFLOW_FILE_PATH}@${CALLED_WORKFLOW_SHA}"
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .node-version
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Verify exact Node toolchain
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(node --version)" = "v24.19.0"
+          test "$(npm --version)" = "11.17.0"
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Build the approval runtime
+        run: npm run build --workspace @switchyard/infrastructure-approval
+
+      - name: Install reviewed OpenTofu
+        shell: bash
+        run: bash scripts/install-opentofu.sh
+
+      - name: Apply exact saved plan
+        id: apply
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          SWITCHYARD_ARTIFACT_ID: ${{ inputs.artifact_id }}
+          SWITCHYARD_COMMIT_SHA: ${{ inputs.commit_sha }}
+          SWITCHYARD_DESTRUCTIVE_ACKNOWLEDGEMENT: ${{ inputs.destructive_acknowledgement }}
+          SWITCHYARD_JOB_CHECK_RUN_ID: ${{ job.check_run_id }}
+          SWITCHYARD_JOB_WORKFLOW_SHA: ${{ job.workflow_sha }}
+          SWITCHYARD_PLAN_DIGEST: ${{ inputs.plan_digest }}
+          SWITCHYARD_PLAN_RUN_ID: ${{ inputs.plan_run_id }}
+          SWITCHYARD_TARGET_CONFIGURATION_JSON: ${{ vars.SWITCHYARD_INFRASTRUCTURE_TARGET_CONFIGURATION_JSON }}
+        run: |
+          set -euo pipefail
+          node scripts/infrastructure-approval-request.mjs apply-saved-plan \
+            | node packages/infrastructure-approval/dist/cli.js apply-saved-plan \
+            | node scripts/infrastructure-approval-result.mjs apply-saved-plan

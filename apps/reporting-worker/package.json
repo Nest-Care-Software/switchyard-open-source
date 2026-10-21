@@ -1,0 +1,22 @@
+{
+  "name": "@switchyard/reporting-worker",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "scripts": {
+    "prebuild": "npm run build --workspace @switchyard/reporting",
+    "build": "tsc -p tsconfig.build.json",
+    "pretest": "npm run build --workspace @switchyard/reporting",
+    "report": "node dist/cli.js",
+    "test": "tsc -p tsconfig.test.json && node --test .test-dist/test/*.test.js",
+    "pretypecheck": "npm run build --workspace @switchyard/reporting",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@switchyard/reporting": "0.0.0"
+  },
+  "devDependencies": {
+    "wrangler": "4.151.3"
+  }
+}

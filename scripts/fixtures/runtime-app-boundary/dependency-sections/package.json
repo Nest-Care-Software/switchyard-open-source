@@ -1,0 +1,16 @@
+{
+  "name": "runtime-boundary-dependency-fixture",
+  "private": true,
+  "dependencies": {
+    "@switchyard/azure-ledger-bootstrap": "0.0.0"
+  },
+  "devDependencies": {
+    "@switchyard/azure-ledger-bootstrap": "0.0.0"
+  },
+  "optionalDependencies": {
+    "@switchyard/azure-ledger-bootstrap": "0.0.0"
+  },
+  "peerDependencies": {
+    "@switchyard/azure-ledger-bootstrap": "0.0.0"
+  }
+}

@@ -1,0 +1,16 @@
+# Non-secret identifiers only. Phase 2 authorises validation, not plan or apply.
+cloudflare_account_id = "00000000000000000000000000000000"
+
+# The D1 database can be planned independently. Keep Worker deployment closed
+# until an application phase has applied reviewed migrations and built a
+# secret-free artifact.
+deploy_worker              = false
+publish_worker             = false
+access_protection_verified = false
+
+# Future staged inputs:
+# worker_artifact_path          = "/absolute/path/to/dist/index.js"
+# worker_artifact_sha256        = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+# d1_schema_revision            = "0123456789abcdef"
+# workers_dev_account_subdomain = "account-subdomain"
+# access_service_token_id       = "00000000-0000-0000-0000-000000000000"

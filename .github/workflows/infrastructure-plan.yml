@@ -1,0 +1,26 @@
+name: Owner infrastructure plan, step 1 of 2
+
+on:
+  workflow_dispatch:
+    inputs:
+      authority_class:
+        description: Exact reviewed authority class, foundation or bootstrap
+        required: true
+        type: string
+      commit_sha:
+        description: Exact lowercase commit SHA currently at main
+        required: true
+        type: string
+
+permissions:
+  actions: read
+  contents: read
+  id-token: write
+
+jobs:
+  request-plan:
+    name: Request the immutable infrastructure plan engine
+    uses: example-org/switchyard/.github/workflows/infrastructure-plan-engine.yml@5c9b286fcb5761a3fcf4b4c87882ec56103333e7
+    with:
+      authority_class: ${{ inputs.authority_class }}
+      commit_sha: ${{ inputs.commit_sha }}
