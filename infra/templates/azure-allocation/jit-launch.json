@@ -1,0 +1,120 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "metadata": {
+    "_generator": {
+      "name": "bicep",
+      "version": "0.46.1.21595",
+      "templateHash": "15026527251719991261"
+    }
+  },
+  "parameters": {
+    "virtualMachineName": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64,
+      "metadata": {
+        "description": "Exact existing generation-one VM name returned by the reviewed base allocation deployment."
+      }
+    },
+    "location": {
+      "type": "string",
+      "defaultValue": "uksouth",
+      "allowedValues": [
+        "uksouth"
+      ],
+      "metadata": {
+        "description": "V1 Azure region. The launch resource must remain beside the existing VM."
+      }
+    },
+    "acceptedScheduleOperationId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256,
+      "metadata": {
+        "description": "Accepted Compute Schedule operation for this exact VM. The controller persists and verifies this before launch."
+      }
+    },
+    "scheduleAcceptedAt": {
+      "type": "string",
+      "minLength": 24,
+      "maxLength": 24,
+      "metadata": {
+        "description": "Acceptance time for the exact Compute Schedule operation, in canonical UTC form."
+      }
+    },
+    "launchPrerequisitesCheckedAt": {
+      "type": "string",
+      "minLength": 24,
+      "maxLength": 24,
+      "metadata": {
+        "description": "Checked bootstrap, local NVMe and Docker prerequisite marker time, in canonical UTC form."
+      }
+    },
+    "latestSafeStart": {
+      "type": "string",
+      "minLength": 24,
+      "maxLength": 24,
+      "metadata": {
+        "description": "Immutable latest safe start copied from the authoritative generation. JIT launch must finish its local guard before this instant."
+      }
+    },
+    "reducedEncodedJitConfiguration": {
+      "type": "securestring",
+      "minLength": 1,
+      "metadata": {
+        "description": "Reduced, single-use encoded JIT runner configuration returned by GitHub. It must never contain a GitHub App key, installation token or registration token."
+      }
+    },
+    "tags": {
+      "type": "object",
+      "metadata": {
+        "description": "Mandatory lifecycle tags copied from the authoritative generation record."
+      }
+    }
+  },
+  "resources": [
+    {
+      "type": "Microsoft.Compute/virtualMachines/runCommands",
+      "apiVersion": "2025-04-01",
+      "name": "[format('{0}/{1}', parameters('virtualMachineName'), 'launch-jit-g1')]",
+      "location": "[parameters('location')]",
+      "properties": {
+        "asyncExecution": false,
+        "protectedParameters": [
+          {
+            "name": "SWITCHYARD_REDUCED_JIT_CONFIG",
+            "value": "[parameters('reducedEncodedJitConfiguration')]"
+          }
+        ],
+        "source": {
+          "script": "#!/usr/bin/env bash\nset -euo pipefail\nset +x\numask 077\n\nrunner_user='switchyard'\nrunner_home='/opt/actions-runner'\nruntime_root='/run/switchyard'\nlauncher_path=\"${runtime_root}/launch-runner\"\n\ncleanup_outer() {\n  status=$?\n  trap - EXIT HUP INT TERM\n  set +e\n  unset SWITCHYARD_REDUCED_JIT_CONFIG ACTIONS_RUNNER_INPUT_JITCONFIG\n  exit \"${status}\"\n}\ntrap cleanup_outer EXIT HUP INT TERM\n\nif [[ ! -x \"${runner_home}/run.sh\" ]] || ! id \"${runner_user}\" >/dev/null 2>&1; then\n  echo 'Switchyard JIT launch failed before runner start.' >&2\n  exit 1\nfi\n\n# The root-owned guest guard uses Azure-host-synchronised UTC plus a monotonic\n# anchor and shares one lock with both persistent deadline timers. Equality is\n# too late for JIT launch even though the pre-job hook can win equality later.\n/usr/local/sbin/switchyard-deadline-guard allow-jit-launch\n\nif [[ -z \"${SWITCHYARD_REDUCED_JIT_CONFIG:-}\" ]]; then\n  echo 'Switchyard JIT launch failed before runner start.' >&2\n  exit 1\nfi\n\ninstall -d -m 0710 -o root -g \"${runner_user}\" \"${runtime_root}\"\ninstall -m 0550 -o root -g \"${runner_user}\" /dev/stdin \"${launcher_path}\" <<'SWITCHYARD_RUNNER'\n#!/usr/bin/env bash\nset -euo pipefail\nset +x\numask 077\n\nrunner_home='/opt/actions-runner'\n\ncleanup_runner_files() {\n  status=$?\n  trap - EXIT HUP INT TERM\n  set +e\n  unset ACTIONS_RUNNER_INPUT_JITCONFIG\n  for credential_name in .credentials .credentials_rsaparams .runner; do\n    credential_path=\"${runner_home}/${credential_name}\"\n    if [[ -f \"${credential_path}\" ]]; then\n      chmod 0600 \"${credential_path}\"\n      rm -f \"${credential_path}\"\n    fi\n  done\n  exit \"${status}\"\n}\ntrap cleanup_runner_files EXIT HUP INT TERM\n\ncd \"${runner_home}\"\n./run.sh >/dev/null 2>&1 &\nrunner_pid=$!\nunset ACTIONS_RUNNER_INPUT_JITCONFIG\nwait \"${runner_pid}\"\nSWITCHYARD_RUNNER\n\nexport ACTIONS_RUNNER_INPUT_JITCONFIG=\"${SWITCHYARD_REDUCED_JIT_CONFIG}\"\nunset SWITCHYARD_REDUCED_JIT_CONFIG\n\nnohup setsid sudo --preserve-env=ACTIONS_RUNNER_INPUT_JITCONFIG \\\n  --user \"${runner_user}\" -- \"${launcher_path}\" \\\n  >/dev/null 2>&1 </dev/null &\nlauncher_pid=$!\nunset ACTIONS_RUNNER_INPUT_JITCONFIG\n\nif ! kill -0 \"${launcher_pid}\" 2>/dev/null; then\n  echo 'Switchyard JIT launch failed before runner start.' >&2\n  exit 1\nfi\n\necho 'Switchyard JIT runner process launch handed off.'\n"
+        },
+        "timeoutInSeconds": 120,
+        "treatFailureAsDeploymentFailure": true
+      },
+      "tags": "[union(parameters('tags'), createObject('acceptedScheduleOperationId', parameters('acceptedScheduleOperationId'), 'launchPrerequisitesCheckedAt', parameters('launchPrerequisitesCheckedAt'), 'latestSafeStart', parameters('latestSafeStart'), 'scheduleAcceptedAt', parameters('scheduleAcceptedAt')))]"
+    }
+  ],
+  "outputs": {
+    "boundVirtualMachineId": {
+      "type": "string",
+      "value": "[resourceId('Microsoft.Compute/virtualMachines', parameters('virtualMachineName'))]"
+    },
+    "managedRunCommandId": {
+      "type": "string",
+      "value": "[resourceId('Microsoft.Compute/virtualMachines/runCommands', parameters('virtualMachineName'), 'launch-jit-g1')]"
+    },
+    "managedRunCommandName": {
+      "type": "string",
+      "value": "launch-jit-g1"
+    },
+    "deletionObligation": {
+      "type": "object",
+      "value": {
+        "deleteImmediatelyAfterConfirmedLaunch": true,
+        "readinessRequiresDeletionComplete": true
+      }
+    }
+  }
+}

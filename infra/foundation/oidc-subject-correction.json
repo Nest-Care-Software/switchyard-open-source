@@ -1,0 +1,77 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "metadata": {
+    "_generator": {
+      "name": "bicep",
+      "version": "0.46.1.21595",
+      "templateHash": "16024546158771078299"
+    }
+  },
+  "variables": {
+    "expectedSubscriptionId": "a0000000-0000-4000-8000-000000000001",
+    "expectedTenantId": "a0000000-0000-4000-8000-000000000002",
+    "expectedResourceGroupName": "rg-switchyard-example-state",
+    "finalEngineSha": "5c9b286fcb5761a3fcf4b4c87882ec56103333e7",
+    "repository": "example-org/switchyard",
+    "subjectPrefix": "[format('repo:example-org@900000004/switchyard@900000003:ref:refs/heads/main:job_workflow_ref:{0}', variables('repository'))]",
+    "planSubject": "[format('{0}/.github/workflows/infrastructure-plan-engine.yml@{1}', variables('subjectPrefix'), variables('finalEngineSha'))]",
+    "applySubject": "[format('{0}/.github/workflows/infrastructure-apply-engine.yml@{1}', variables('subjectPrefix'), variables('finalEngineSha'))]",
+    "activationAllowed": "[and(and(equals(subscription().subscriptionId, variables('expectedSubscriptionId')), equals(tenant().tenantId, variables('expectedTenantId'))), equals(resourceGroup().name, variables('expectedResourceGroupName')))]"
+  },
+  "resources": [
+    {
+      "condition": "[variables('activationAllowed')]",
+      "type": "Microsoft.ManagedIdentity/userAssignedIdentities/federatedIdentityCredentials",
+      "apiVersion": "2023-01-31",
+      "name": "[format('{0}/{1}', 'id-switchyard-infra-planner-uksouth', 'github-infrastructure-plan-engine')]",
+      "properties": {
+        "audiences": [
+          "api://switchyard-900000003/infrastructure/planner"
+        ],
+        "issuer": "https://token.actions.githubusercontent.com",
+        "subject": "[variables('planSubject')]"
+      }
+    },
+    {
+      "condition": "[variables('activationAllowed')]",
+      "type": "Microsoft.ManagedIdentity/userAssignedIdentities/federatedIdentityCredentials",
+      "apiVersion": "2023-01-31",
+      "name": "[format('{0}/{1}', 'id-switchyard-infra-foundation-uksouth', 'github-infrastructure-apply-engine')]",
+      "properties": {
+        "audiences": [
+          "api://switchyard-900000003/infrastructure/foundation-applier"
+        ],
+        "issuer": "https://token.actions.githubusercontent.com",
+        "subject": "[variables('applySubject')]"
+      }
+    },
+    {
+      "condition": "[variables('activationAllowed')]",
+      "type": "Microsoft.ManagedIdentity/userAssignedIdentities/federatedIdentityCredentials",
+      "apiVersion": "2023-01-31",
+      "name": "[format('{0}/{1}', 'id-switchyard-infra-bootstrap-uksouth', 'github-infrastructure-apply-engine')]",
+      "properties": {
+        "audiences": [
+          "api://switchyard-900000003/infrastructure/bootstrap-applier"
+        ],
+        "issuer": "https://token.actions.githubusercontent.com",
+        "subject": "[variables('applySubject')]"
+      }
+    }
+  ],
+  "outputs": {
+    "corrected": {
+      "type": "bool",
+      "value": "[variables('activationAllowed')]"
+    },
+    "planSubject": {
+      "type": "string",
+      "value": "[if(variables('activationAllowed'), variables('planSubject'), '')]"
+    },
+    "applySubject": {
+      "type": "string",
+      "value": "[if(variables('activationAllowed'), variables('applySubject'), '')]"
+    }
+  }
+}

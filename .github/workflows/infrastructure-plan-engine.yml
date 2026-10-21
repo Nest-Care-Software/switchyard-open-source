@@ -1,0 +1,127 @@
+name: Infrastructure plan engine (unreachable)
+
+on:
+  workflow_call:
+    inputs:
+      authority_class:
+        description: Exact reviewed authority class, foundation or bootstrap
+        required: true
+        type: string
+      commit_sha:
+        description: Exact lowercase commit SHA currently at main
+        required: true
+        type: string
+
+permissions:
+  actions: read
+  contents: read
+  id-token: write
+
+jobs:
+  create-plan:
+    name: Create immutable infrastructure plan
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+
+    steps:
+      - name: Check out the reviewed commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Validate immutable workflow inputs
+        shell: bash
+        env:
+          AUTHORITY_CLASS: ${{ inputs.authority_class }}
+          CALLED_WORKFLOW_FILE_PATH: ${{ job.workflow_file_path }}
+          CALLED_WORKFLOW_REF: ${{ job.workflow_ref }}
+          CALLED_WORKFLOW_REPOSITORY: ${{ job.workflow_repository }}
+          CALLED_WORKFLOW_SHA: ${{ job.workflow_sha }}
+          COMMIT_SHA: ${{ inputs.commit_sha }}
+          CURRENT_SHA: ${{ github.sha }}
+          REPOSITORY_ID: ${{ github.repository_id }}
+          REPOSITORY_OWNER_ID: ${{ github.repository_owner_id }}
+          RUN_ATTEMPT: ${{ github.run_attempt }}
+        run: |
+          set -euo pipefail
+          test "${REPOSITORY_ID}" = "900000003"
+          test "${REPOSITORY_OWNER_ID}" = "900000004"
+          test "${RUN_ATTEMPT}" = "1"
+          [[ "${COMMIT_SHA}" =~ ^[0-9a-f]{40}$ ]]
+          test "${COMMIT_SHA}" = "${CURRENT_SHA}"
+          [[ "${AUTHORITY_CLASS}" = "foundation" || "${AUTHORITY_CLASS}" = "bootstrap" ]]
+          test "${CALLED_WORKFLOW_REPOSITORY}" = "example-org/switchyard"
+          test "${CALLED_WORKFLOW_FILE_PATH}" = ".github/workflows/infrastructure-plan-engine.yml"
+          [[ "${CALLED_WORKFLOW_SHA}" =~ ^[0-9a-f]{40}$ ]]
+          test "${CALLED_WORKFLOW_REF}" = "${CALLED_WORKFLOW_REPOSITORY}/${CALLED_WORKFLOW_FILE_PATH}@${CALLED_WORKFLOW_SHA}"
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .node-version
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Verify exact Node toolchain
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(node --version)" = "v24.19.0"
+          test "$(npm --version)" = "11.17.0"
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Build the approval runtime
+        run: npm run build --workspace @switchyard/infrastructure-approval
+
+      - name: Install reviewed OpenTofu
+        shell: bash
+        run: bash scripts/install-opentofu.sh
+
+      - name: Create exact saved-plan bundle
+        id: plan
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          SWITCHYARD_AUTHORITY_CLASS: ${{ inputs.authority_class }}
+          SWITCHYARD_JOB_CHECK_RUN_ID: ${{ job.check_run_id }}
+          SWITCHYARD_JOB_WORKFLOW_SHA: ${{ job.workflow_sha }}
+          SWITCHYARD_TARGET_CONFIGURATION_JSON: ${{ vars.SWITCHYARD_INFRASTRUCTURE_TARGET_CONFIGURATION_JSON }}
+        run: |
+          set -euo pipefail
+          node scripts/infrastructure-approval-request.mjs plan \
+            | node packages/infrastructure-approval/dist/cli.js plan \
+            | node scripts/infrastructure-approval-result.mjs plan
+
+      - name: Upload immutable one-day plan bundle
+        id: upload
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ${{ steps.plan.outputs.artifact_name }}
+          path: ${{ steps.plan.outputs.artifact_path }}
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
+          overwrite: false
+          include-hidden-files: false
+
+      - name: Record immutable artefact identity
+        shell: bash
+        env:
+          ARTIFACT_DIGEST: ${{ steps.upload.outputs.artifact-digest }}
+          ARTIFACT_ID: ${{ steps.upload.outputs.artifact-id }}
+          ARTIFACT_URL: ${{ steps.upload.outputs.artifact-url }}
+        run: |
+          set -euo pipefail
+          [[ "${ARTIFACT_ID}" =~ ^[1-9][0-9]{0,19}$ ]]
+          [[ "${ARTIFACT_DIGEST}" =~ ^[0-9a-f]{64}$ ]]
+          [[ "${ARTIFACT_URL}" =~ ^https://github.com/example-org/switchyard/actions/runs/[1-9][0-9]{0,19}/artifacts/[1-9][0-9]{0,19}$ ]]
+          {
+            echo ""
+            echo "- GitHub artefact ID: \`${ARTIFACT_ID}\`"
+            echo "- GitHub artefact digest: \`${ARTIFACT_DIGEST}\`"
+            echo "- GitHub artefact: ${ARTIFACT_URL}"
+            echo "- Retention: 1 day"
+          } >> "${GITHUB_STEP_SUMMARY}"

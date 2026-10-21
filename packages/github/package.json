@@ -1,0 +1,34 @@
+{
+  "name": "@switchyard/github",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "files": [
+    "dist"
+  ],
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./testing": {
+      "types": "./dist/testing/fakes.d.ts",
+      "import": "./dist/testing/fakes.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "prebuild": "npm run build --workspace @switchyard/core",
+    "prepack": "npm run build",
+    "pretest": "npm run build --workspace @switchyard/core",
+    "test": "tsc -p tsconfig.test.json && node --test .test-dist/test/*.test.js",
+    "pretypecheck": "npm run build --workspace @switchyard/core",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@switchyard/core": "0.0.0",
+    "yaml": "2.9.0"
+  }
+}

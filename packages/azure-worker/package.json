@@ -1,0 +1,29 @@
+{
+  "name": "@switchyard/azure-worker",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "files": [
+    "dist"
+  ],
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "prebuild": "npm run build --workspace @switchyard/core",
+    "build": "tsc -p tsconfig.build.json",
+    "prepack": "npm run build",
+    "pretest": "npm run build --workspace @switchyard/core",
+    "test": "tsc -p tsconfig.test.json && node --test .test-dist/test/*.test.js",
+    "pretypecheck": "npm run build --workspace @switchyard/core",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@switchyard/core": "0.0.0"
+  }
+}

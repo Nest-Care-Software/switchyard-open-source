@@ -1,0 +1,789 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2018-05-01/subscriptionDeploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "metadata": {
+    "_generator": {
+      "name": "bicep",
+      "version": "0.46.1.21595",
+      "templateHash": "10965954205469667857"
+    }
+  },
+  "parameters": {
+    "finalEngineSha": {
+      "type": "string",
+      "minLength": 40,
+      "maxLength": 40,
+      "metadata": {
+        "description": "Full reviewed commit SHA containing both final reusable infrastructure engines."
+      }
+    },
+    "deployReceiptImmutabilityPolicy": {
+      "type": "bool",
+      "defaultValue": true,
+      "metadata": {
+        "description": "Deploys the receipt immutability policy only while it is absent or still Unlocked. The owner wrapper derives this from live evidence."
+      }
+    }
+  },
+  "variables": {
+    "expectedSubscriptionId": "a0000000-0000-4000-8000-000000000001",
+    "expectedTenantId": "a0000000-0000-4000-8000-000000000002",
+    "disabledEngineSha": "49be281fc0d6c2cf746a0ce0f6db517d0ac821af",
+    "plannerAudience": "api://switchyard-900000003/infrastructure/planner",
+    "foundationAudience": "api://switchyard-900000003/infrastructure/foundation-applier",
+    "bootstrapAudience": "api://switchyard-900000003/infrastructure/bootstrap-applier",
+    "readerRoleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'acdd72a7-3385-48ef-bd42-f606fba81ae7')]",
+    "location": "uksouth",
+    "tags": {
+      "managed-by": "bicep",
+      "system": "switchyard",
+      "purpose": "infrastructure-approval-foundation"
+    },
+    "finalEngineShaWithoutHex": "[replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(parameters('finalEngineSha'), '0', ''), '1', ''), '2', ''), '3', ''), '4', ''), '5', ''), '6', ''), '7', ''), '8', ''), '9', ''), 'a', ''), 'b', ''), 'c', ''), 'd', ''), 'e', ''), 'f', '')]",
+    "activationAllowed": "[and(and(and(and(equals(subscription().subscriptionId, variables('expectedSubscriptionId')), equals(tenant().tenantId, variables('expectedTenantId'))), not(equals(parameters('finalEngineSha'), variables('disabledEngineSha')))), equals(length(parameters('finalEngineSha')), 40)), empty(variables('finalEngineShaWithoutHex')))]"
+  },
+  "resources": [
+    {
+      "condition": "[variables('activationAllowed')]",
+      "type": "Microsoft.Resources/resourceGroups",
+      "apiVersion": "2024-11-01",
+      "name": "rg-switchyard-example-state",
+      "location": "[variables('location')]",
+      "tags": "[variables('tags')]"
+    },
+    {
+      "condition": "[variables('activationAllowed')]",
+      "type": "Microsoft.Authorization/roleDefinitions",
+      "apiVersion": "2022-04-01",
+      "name": "[guid(subscription().id, 'switchyard-infrastructure-state-reader')]",
+      "properties": {
+        "assignableScopes": [
+          "[subscription().id]"
+        ],
+        "description": "Reads only the exact OpenTofu state blob scope assigned to the planner.",
+        "permissions": [
+          {
+            "actions": [],
+            "dataActions": [
+              "Microsoft.Storage/storageAccounts/blobServices/containers/blobs/read"
+            ],
+            "notActions": [],
+            "notDataActions": []
+          }
+        ],
+        "roleName": "Switchyard infrastructure state reader",
+        "type": "CustomRole"
+      }
+    },
+    {
+      "condition": "[variables('activationAllowed')]",
+      "type": "Microsoft.Authorization/roleDefinitions",
+      "apiVersion": "2022-04-01",
+      "name": "[guid(subscription().id, 'switchyard-infrastructure-log-query-planner')]",
+      "properties": {
+        "assignableScopes": [
+          "[subscription().id]"
+        ],
+        "description": "Reads only Log Analytics query results required to refresh the reviewed scheduled-query alert during planning.",
+        "permissions": [
+          {
+            "actions": [
+              "Microsoft.OperationalInsights/workspaces/query/read"
+            ],
+            "dataActions": [],
+            "notActions": [],
+            "notDataActions": []
+          }
+        ],
+        "roleName": "Switchyard infrastructure log query planner",
+        "type": "CustomRole"
+      }
+    },
+    {
+      "condition": "[variables('activationAllowed')]",
+      "type": "Microsoft.Authorization/roleDefinitions",
+      "apiVersion": "2022-04-01",
+      "name": "[guid(subscription().id, 'switchyard-infrastructure-approval-blob-custodian')]",
+      "properties": {
+        "assignableScopes": [
+          "[subscription().id]"
+        ],
+        "description": "Reads and conditionally writes state, receipt, lease and intent blobs at separately assigned container scopes.",
+        "permissions": [
+          {
+            "actions": [],
+            "dataActions": [
+              "Microsoft.Storage/storageAccounts/blobServices/containers/blobs/read",
+              "Microsoft.Storage/storageAccounts/blobServices/containers/blobs/write"
+            ],
+            "notActions": [],
+            "notDataActions": []
+          }
+        ],
+        "roleName": "Switchyard infrastructure approval blob custodian",
+        "type": "CustomRole"
+      }
+    },
+    {
+      "condition": "[variables('activationAllowed')]",
+      "type": "Microsoft.Authorization/roleDefinitions",
+      "apiVersion": "2022-04-01",
+      "name": "[guid(subscription().id, 'switchyard-initial-control-creator')]",
+      "properties": {
+        "assignableScopes": [
+          "[subscription().id]"
+        ],
+        "description": "Creates only the reviewed initial Switchyard control foundation. It has no delete or data-plane permission and is deliberately unassigned by this deployment.",
+        "permissions": [
+          {
+            "actions": [
+              "Microsoft.Resources/subscriptions/read",
+              "Microsoft.Resources/subscriptions/locations/read",
+              "Microsoft.Resources/providers/read",
+              "Microsoft.Resources/subscriptions/providers/read",
+              "Microsoft.Resources/subscriptions/resourceGroups/read",
+              "Microsoft.Resources/subscriptions/resourceGroups/write",
+              "Microsoft.Authorization/roleDefinitions/read",
+              "Microsoft.Authorization/roleDefinitions/write",
+              "Microsoft.Authorization/roleAssignments/read",
+              "Microsoft.Authorization/roleAssignments/write",
+              "Microsoft.Authorization/locks/read",
+              "Microsoft.Authorization/locks/write",
+              "Microsoft.ManagedIdentity/userAssignedIdentities/read",
+              "Microsoft.ManagedIdentity/userAssignedIdentities/write",
+              "Microsoft.ManagedIdentity/userAssignedIdentities/assign/action",
+              "Microsoft.ManagedIdentity/userAssignedIdentities/federatedIdentityCredentials/read",
+              "Microsoft.ManagedIdentity/userAssignedIdentities/federatedIdentityCredentials/write",
+              "Microsoft.Storage/storageAccounts/read",
+              "Microsoft.Storage/storageAccounts/write",
+              "Microsoft.Storage/storageAccounts/managementPolicies/read",
+              "Microsoft.Storage/storageAccounts/managementPolicies/write",
+              "Microsoft.Storage/storageAccounts/blobServices/read",
+              "Microsoft.Storage/storageAccounts/blobServices/write",
+              "Microsoft.Storage/storageAccounts/blobServices/containers/read",
+              "Microsoft.Storage/storageAccounts/blobServices/containers/write",
+              "Microsoft.Storage/storageAccounts/queueServices/read",
+              "Microsoft.Storage/storageAccounts/queueServices/queues/read",
+              "Microsoft.Storage/storageAccounts/queueServices/queues/write",
+              "Microsoft.Storage/storageAccounts/tableServices/read",
+              "Microsoft.Storage/storageAccounts/tableServices/tables/read",
+              "Microsoft.Storage/storageAccounts/tableServices/tables/write",
+              "Microsoft.KeyVault/vaults/read",
+              "Microsoft.KeyVault/vaults/write",
+              "Microsoft.Web/serverfarms/read",
+              "Microsoft.Web/serverfarms/write",
+              "Microsoft.Web/checknameavailability/read",
+              "Microsoft.Web/sites/read",
+              "Microsoft.Web/sites/write",
+              "Microsoft.Web/sites/config/read",
+              "Microsoft.Web/sites/config/write",
+              "Microsoft.Web/sites/config/list/action",
+              "Microsoft.Web/sites/basicPublishingCredentialsPolicies/read",
+              "Microsoft.Web/sites/basicPublishingCredentialsPolicies/write",
+              "Microsoft.OperationalInsights/workspaces/read",
+              "Microsoft.OperationalInsights/workspaces/write",
+              "Microsoft.OperationalInsights/workspaces/query/read",
+              "Microsoft.OperationalInsights/deletedworkspaces/read",
+              "Microsoft.Insights/components/read",
+              "Microsoft.Insights/components/write",
+              "Microsoft.Insights/components/currentbillingfeatures/read",
+              "Microsoft.Insights/components/currentbillingfeatures/write",
+              "Microsoft.Insights/actionGroups/read",
+              "Microsoft.Insights/actionGroups/write",
+              "Microsoft.Insights/metricAlerts/read",
+              "Microsoft.Insights/metricAlerts/write",
+              "Microsoft.Insights/diagnosticSettings/read",
+              "Microsoft.Insights/diagnosticSettings/write",
+              "Microsoft.Insights/scheduledQueryRules/read",
+              "Microsoft.Insights/scheduledQueryRules/write",
+              "Microsoft.Network/virtualNetworks/read",
+              "Microsoft.Network/virtualNetworks/write",
+              "Microsoft.Network/virtualNetworks/subnets/read",
+              "Microsoft.Network/virtualNetworks/subnets/write",
+              "Microsoft.Network/publicIPAddresses/read",
+              "Microsoft.Network/publicIPAddresses/write",
+              "Microsoft.Network/publicIPAddresses/join/action",
+              "Microsoft.Network/natGateways/read",
+              "Microsoft.Network/natGateways/write",
+              "Microsoft.Network/natGateways/join/action"
+            ],
+            "dataActions": [],
+            "notActions": [],
+            "notDataActions": []
+          }
+        ],
+        "roleName": "Switchyard initial control creator",
+        "type": "CustomRole"
+      }
+    },
+    {
+      "condition": "[variables('activationAllowed')]",
+      "type": "Microsoft.Authorization/roleAssignments",
+      "apiVersion": "2022-04-01",
+      "name": "[guid(subscription().id, 'rg-switchyard-example-state', 'id-switchyard-infra-planner-uksouth', variables('readerRoleDefinitionId'))]",
+      "properties": {
+        "description": "Subscription management-plane visibility for the read-only Switchyard infrastructure planner.",
+        "principalId": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, 'rg-switchyard-example-state'), 'Microsoft.Resources/deployments', 'switchyard-approval-foundation-resources'), '2025-04-01').outputs.plannerIdentityPrincipalId.value]",
+        "principalType": "ServicePrincipal",
+        "roleDefinitionId": "[variables('readerRoleDefinitionId')]"
+      },
+      "dependsOn": [
+        "[subscriptionResourceId('Microsoft.Resources/resourceGroups', 'rg-switchyard-example-state')]",
+        "[extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, 'rg-switchyard-example-state'), 'Microsoft.Resources/deployments', 'switchyard-approval-foundation-resources')]"
+      ]
+    },
+    {
+      "condition": "[variables('activationAllowed')]",
+      "type": "Microsoft.Authorization/roleAssignments",
+      "apiVersion": "2022-04-01",
+      "name": "[guid(subscription().id, 'rg-switchyard-example-state', 'id-switchyard-infra-planner-uksouth', subscriptionResourceId('Microsoft.Authorization/roleDefinitions', guid(subscription().id, 'switchyard-infrastructure-log-query-planner')))]",
+      "properties": {
+        "description": "Exact Log Analytics query permission needed to refresh the reviewed scheduled-query alert during read-only planning.",
+        "principalId": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, 'rg-switchyard-example-state'), 'Microsoft.Resources/deployments', 'switchyard-approval-foundation-resources'), '2025-04-01').outputs.plannerIdentityPrincipalId.value]",
+        "principalType": "ServicePrincipal",
+        "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', guid(subscription().id, 'switchyard-infrastructure-log-query-planner'))]"
+      },
+      "dependsOn": [
+        "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', guid(subscription().id, 'switchyard-infrastructure-log-query-planner'))]",
+        "[subscriptionResourceId('Microsoft.Resources/resourceGroups', 'rg-switchyard-example-state')]",
+        "[extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, 'rg-switchyard-example-state'), 'Microsoft.Resources/deployments', 'switchyard-approval-foundation-resources')]"
+      ]
+    },
+    {
+      "condition": "[variables('activationAllowed')]",
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "switchyard-approval-foundation-resources",
+      "resourceGroup": "rg-switchyard-example-state",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "finalEngineSha": {
+            "value": "[parameters('finalEngineSha')]"
+          },
+          "plannerAudience": {
+            "value": "[variables('plannerAudience')]"
+          },
+          "foundationAudience": {
+            "value": "[variables('foundationAudience')]"
+          },
+          "bootstrapAudience": {
+            "value": "[variables('bootstrapAudience')]"
+          },
+          "stateReaderRoleDefinitionId": {
+            "value": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', guid(subscription().id, 'switchyard-infrastructure-state-reader'))]"
+          },
+          "approvalBlobCustodianRoleDefinitionId": {
+            "value": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', guid(subscription().id, 'switchyard-infrastructure-approval-blob-custodian'))]"
+          },
+          "deployReceiptImmutabilityPolicy": {
+            "value": "[parameters('deployReceiptImmutabilityPolicy')]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.46.1.21595",
+              "templateHash": "8885083395987855416"
+            }
+          },
+          "parameters": {
+            "finalEngineSha": {
+              "type": "string",
+              "minLength": 40,
+              "maxLength": 40,
+              "metadata": {
+                "description": "Full reviewed commit SHA containing both final reusable infrastructure engines."
+              }
+            },
+            "plannerAudience": {
+              "type": "string",
+              "allowedValues": [
+                "api://switchyard-900000003/infrastructure/planner"
+              ],
+              "metadata": {
+                "description": "Exact custom audience registered only for the planner identity."
+              }
+            },
+            "foundationAudience": {
+              "type": "string",
+              "allowedValues": [
+                "api://switchyard-900000003/infrastructure/foundation-applier"
+              ],
+              "metadata": {
+                "description": "Exact custom audience registered only for the steady foundation applier identity."
+              }
+            },
+            "bootstrapAudience": {
+              "type": "string",
+              "allowedValues": [
+                "api://switchyard-900000003/infrastructure/bootstrap-applier"
+              ],
+              "metadata": {
+                "description": "Exact custom audience registered only for the bootstrap applier identity."
+              }
+            },
+            "stateReaderRoleDefinitionId": {
+              "type": "string"
+            },
+            "approvalBlobCustodianRoleDefinitionId": {
+              "type": "string"
+            },
+            "deployReceiptImmutabilityPolicy": {
+              "type": "bool"
+            }
+          },
+          "variables": {
+            "repository": "example-org/switchyard",
+            "subjectPrefix": "[format('repo:example-org@900000004/switchyard@900000003:ref:refs/heads/main:job_workflow_ref:{0}', variables('repository'))]",
+            "planSubject": "[format('{0}/.github/workflows/infrastructure-plan-engine.yml@{1}', variables('subjectPrefix'), parameters('finalEngineSha'))]",
+            "applySubject": "[format('{0}/.github/workflows/infrastructure-apply-engine.yml@{1}', variables('subjectPrefix'), parameters('finalEngineSha'))]",
+            "location": "[resourceGroup().location]",
+            "tags": {
+              "managed-by": "bicep",
+              "system": "switchyard",
+              "purpose": "infrastructure-approval-foundation"
+            }
+          },
+          "resources": [
+            {
+              "type": "Microsoft.Authorization/locks",
+              "apiVersion": "2020-05-01",
+              "name": "switchyard-state-cannot-delete",
+              "properties": {
+                "level": "CanNotDelete",
+                "notes": "Protects the external Switchyard state and approval-control foundation from deletion."
+              }
+            },
+            {
+              "type": "Microsoft.Storage/storageAccounts",
+              "apiVersion": "2023-05-01",
+              "name": "swexampleapprovalstate",
+              "location": "[variables('location')]",
+              "tags": "[variables('tags')]",
+              "kind": "StorageV2",
+              "sku": {
+                "name": "Standard_LRS"
+              },
+              "properties": {
+                "accessTier": "Hot",
+                "allowBlobPublicAccess": false,
+                "allowSharedKeyAccess": false,
+                "defaultToOAuthAuthentication": true,
+                "minimumTlsVersion": "TLS1_2",
+                "publicNetworkAccess": "Enabled",
+                "supportsHttpsTrafficOnly": true,
+                "encryption": {
+                  "keySource": "Microsoft.Storage",
+                  "requireInfrastructureEncryption": true,
+                  "services": {
+                    "blob": {
+                      "enabled": true,
+                      "keyType": "Account"
+                    },
+                    "file": {
+                      "enabled": true,
+                      "keyType": "Account"
+                    }
+                  }
+                },
+                "networkAcls": {
+                  "bypass": "None",
+                  "defaultAction": "Allow"
+                }
+              }
+            },
+            {
+              "type": "Microsoft.Storage/storageAccounts/blobServices",
+              "apiVersion": "2023-05-01",
+              "name": "[format('{0}/{1}', 'swexampleapprovalstate', 'default')]",
+              "properties": {
+                "containerDeleteRetentionPolicy": {
+                  "enabled": true,
+                  "days": 30
+                },
+                "deleteRetentionPolicy": {
+                  "enabled": true,
+                  "days": 30,
+                  "allowPermanentDelete": false
+                },
+                "isVersioningEnabled": true
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Storage/storageAccounts', 'swexampleapprovalstate')]"
+              ]
+            },
+            {
+              "type": "Microsoft.Storage/storageAccounts/blobServices/containers",
+              "apiVersion": "2023-05-01",
+              "name": "[format('{0}/{1}/{2}', 'swexampleapprovalstate', 'default', 'tfstate')]",
+              "properties": {
+                "publicAccess": "None"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Storage/storageAccounts/blobServices', 'swexampleapprovalstate', 'default')]"
+              ]
+            },
+            {
+              "type": "Microsoft.Storage/storageAccounts/blobServices/containers",
+              "apiVersion": "2023-05-01",
+              "name": "[format('{0}/{1}/{2}', 'swexampleapprovalstate', 'default', 'apply-control')]",
+              "properties": {
+                "publicAccess": "None"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Storage/storageAccounts/blobServices', 'swexampleapprovalstate', 'default')]"
+              ]
+            },
+            {
+              "type": "Microsoft.Storage/storageAccounts",
+              "apiVersion": "2023-05-01",
+              "name": "swexampleapprovalreceipt",
+              "location": "[variables('location')]",
+              "tags": "[variables('tags')]",
+              "kind": "StorageV2",
+              "sku": {
+                "name": "Standard_LRS"
+              },
+              "properties": {
+                "accessTier": "Hot",
+                "allowBlobPublicAccess": false,
+                "allowSharedKeyAccess": false,
+                "defaultToOAuthAuthentication": true,
+                "minimumTlsVersion": "TLS1_2",
+                "publicNetworkAccess": "Enabled",
+                "supportsHttpsTrafficOnly": true,
+                "encryption": {
+                  "keySource": "Microsoft.Storage",
+                  "requireInfrastructureEncryption": true,
+                  "services": {
+                    "blob": {
+                      "enabled": true,
+                      "keyType": "Account"
+                    },
+                    "file": {
+                      "enabled": true,
+                      "keyType": "Account"
+                    }
+                  }
+                },
+                "networkAcls": {
+                  "bypass": "None",
+                  "defaultAction": "Allow"
+                }
+              }
+            },
+            {
+              "type": "Microsoft.Storage/storageAccounts/blobServices",
+              "apiVersion": "2023-05-01",
+              "name": "[format('{0}/{1}', 'swexampleapprovalreceipt', 'default')]",
+              "properties": {
+                "containerDeleteRetentionPolicy": {
+                  "enabled": false
+                },
+                "deleteRetentionPolicy": {
+                  "enabled": false
+                },
+                "isVersioningEnabled": false
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Storage/storageAccounts', 'swexampleapprovalreceipt')]"
+              ]
+            },
+            {
+              "type": "Microsoft.Storage/storageAccounts/blobServices/containers",
+              "apiVersion": "2023-05-01",
+              "name": "[format('{0}/{1}/{2}', 'swexampleapprovalreceipt', 'default', 'plan-receipts')]",
+              "properties": {
+                "publicAccess": "None"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Storage/storageAccounts/blobServices', 'swexampleapprovalreceipt', 'default')]"
+              ]
+            },
+            {
+              "condition": "[parameters('deployReceiptImmutabilityPolicy')]",
+              "type": "Microsoft.Storage/storageAccounts/blobServices/containers/immutabilityPolicies",
+              "apiVersion": "2023-05-01",
+              "name": "[format('{0}/{1}/{2}/{3}', 'swexampleapprovalreceipt', 'default', 'plan-receipts', 'default')]",
+              "properties": {
+                "allowProtectedAppendWrites": false,
+                "allowProtectedAppendWritesAll": false,
+                "immutabilityPeriodSinceCreationInDays": 1
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Storage/storageAccounts/blobServices/containers', 'swexampleapprovalreceipt', 'default', 'plan-receipts')]"
+              ]
+            },
+            {
+              "type": "Microsoft.ManagedIdentity/userAssignedIdentities",
+              "apiVersion": "2023-01-31",
+              "name": "id-switchyard-infra-planner-uksouth",
+              "location": "[variables('location')]",
+              "tags": "[variables('tags')]"
+            },
+            {
+              "type": "Microsoft.ManagedIdentity/userAssignedIdentities",
+              "apiVersion": "2023-01-31",
+              "name": "id-switchyard-infra-foundation-uksouth",
+              "location": "[variables('location')]",
+              "tags": "[variables('tags')]"
+            },
+            {
+              "type": "Microsoft.ManagedIdentity/userAssignedIdentities",
+              "apiVersion": "2023-01-31",
+              "name": "id-switchyard-infra-bootstrap-uksouth",
+              "location": "[variables('location')]",
+              "tags": "[variables('tags')]"
+            },
+            {
+              "type": "Microsoft.ManagedIdentity/userAssignedIdentities/federatedIdentityCredentials",
+              "apiVersion": "2023-01-31",
+              "name": "[format('{0}/{1}', 'id-switchyard-infra-planner-uksouth', 'github-infrastructure-plan-engine')]",
+              "properties": {
+                "audiences": [
+                  "[parameters('plannerAudience')]"
+                ],
+                "issuer": "https://token.actions.githubusercontent.com",
+                "subject": "[variables('planSubject')]"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', 'id-switchyard-infra-planner-uksouth')]"
+              ]
+            },
+            {
+              "type": "Microsoft.ManagedIdentity/userAssignedIdentities/federatedIdentityCredentials",
+              "apiVersion": "2023-01-31",
+              "name": "[format('{0}/{1}', 'id-switchyard-infra-foundation-uksouth', 'github-infrastructure-apply-engine')]",
+              "properties": {
+                "audiences": [
+                  "[parameters('foundationAudience')]"
+                ],
+                "issuer": "https://token.actions.githubusercontent.com",
+                "subject": "[variables('applySubject')]"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', 'id-switchyard-infra-foundation-uksouth')]"
+              ]
+            },
+            {
+              "type": "Microsoft.ManagedIdentity/userAssignedIdentities/federatedIdentityCredentials",
+              "apiVersion": "2023-01-31",
+              "name": "[format('{0}/{1}', 'id-switchyard-infra-bootstrap-uksouth', 'github-infrastructure-apply-engine')]",
+              "properties": {
+                "audiences": [
+                  "[parameters('bootstrapAudience')]"
+                ],
+                "issuer": "https://token.actions.githubusercontent.com",
+                "subject": "[variables('applySubject')]"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', 'id-switchyard-infra-bootstrap-uksouth')]"
+              ]
+            },
+            {
+              "type": "Microsoft.Authorization/roleAssignments",
+              "apiVersion": "2022-04-01",
+              "scope": "[resourceId('Microsoft.Storage/storageAccounts/blobServices/containers', 'swexampleapprovalstate', 'default', 'tfstate')]",
+              "name": "[guid(resourceId('Microsoft.Storage/storageAccounts/blobServices/containers', 'swexampleapprovalstate', 'default', 'tfstate'), resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', 'id-switchyard-infra-planner-uksouth'), parameters('stateReaderRoleDefinitionId'))]",
+              "properties": {
+                "principalId": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', 'id-switchyard-infra-planner-uksouth'), '2023-01-31').principalId]",
+                "principalType": "ServicePrincipal",
+                "roleDefinitionId": "[parameters('stateReaderRoleDefinitionId')]"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', 'id-switchyard-infra-planner-uksouth')]",
+                "[resourceId('Microsoft.Storage/storageAccounts/blobServices/containers', 'swexampleapprovalstate', 'default', 'tfstate')]"
+              ]
+            },
+            {
+              "type": "Microsoft.Authorization/roleAssignments",
+              "apiVersion": "2022-04-01",
+              "scope": "[resourceId('Microsoft.Storage/storageAccounts/blobServices/containers', 'swexampleapprovalstate', 'default', 'tfstate')]",
+              "name": "[guid(resourceId('Microsoft.Storage/storageAccounts/blobServices/containers', 'swexampleapprovalstate', 'default', 'tfstate'), resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', 'id-switchyard-infra-foundation-uksouth'), parameters('approvalBlobCustodianRoleDefinitionId'))]",
+              "properties": {
+                "principalId": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', 'id-switchyard-infra-foundation-uksouth'), '2023-01-31').principalId]",
+                "principalType": "ServicePrincipal",
+                "roleDefinitionId": "[parameters('approvalBlobCustodianRoleDefinitionId')]"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', 'id-switchyard-infra-foundation-uksouth')]",
+                "[resourceId('Microsoft.Storage/storageAccounts/blobServices/containers', 'swexampleapprovalstate', 'default', 'tfstate')]"
+              ]
+            },
+            {
+              "type": "Microsoft.Authorization/roleAssignments",
+              "apiVersion": "2022-04-01",
+              "scope": "[resourceId('Microsoft.Storage/storageAccounts/blobServices/containers', 'swexampleapprovalstate', 'default', 'apply-control')]",
+              "name": "[guid(resourceId('Microsoft.Storage/storageAccounts/blobServices/containers', 'swexampleapprovalstate', 'default', 'apply-control'), resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', 'id-switchyard-infra-foundation-uksouth'), parameters('approvalBlobCustodianRoleDefinitionId'))]",
+              "properties": {
+                "principalId": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', 'id-switchyard-infra-foundation-uksouth'), '2023-01-31').principalId]",
+                "principalType": "ServicePrincipal",
+                "roleDefinitionId": "[parameters('approvalBlobCustodianRoleDefinitionId')]"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Storage/storageAccounts/blobServices/containers', 'swexampleapprovalstate', 'default', 'apply-control')]",
+                "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', 'id-switchyard-infra-foundation-uksouth')]"
+              ]
+            },
+            {
+              "type": "Microsoft.Authorization/roleAssignments",
+              "apiVersion": "2022-04-01",
+              "scope": "[resourceId('Microsoft.Storage/storageAccounts/blobServices/containers', 'swexampleapprovalreceipt', 'default', 'plan-receipts')]",
+              "name": "[guid(resourceId('Microsoft.Storage/storageAccounts/blobServices/containers', 'swexampleapprovalreceipt', 'default', 'plan-receipts'), resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', 'id-switchyard-infra-foundation-uksouth'), parameters('approvalBlobCustodianRoleDefinitionId'))]",
+              "properties": {
+                "principalId": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', 'id-switchyard-infra-foundation-uksouth'), '2023-01-31').principalId]",
+                "principalType": "ServicePrincipal",
+                "roleDefinitionId": "[parameters('approvalBlobCustodianRoleDefinitionId')]"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', 'id-switchyard-infra-foundation-uksouth')]",
+                "[resourceId('Microsoft.Storage/storageAccounts/blobServices/containers', 'swexampleapprovalreceipt', 'default', 'plan-receipts')]"
+              ]
+            },
+            {
+              "type": "Microsoft.Authorization/roleAssignments",
+              "apiVersion": "2022-04-01",
+              "scope": "[resourceId('Microsoft.Storage/storageAccounts/blobServices/containers', 'swexampleapprovalstate', 'default', 'tfstate')]",
+              "name": "[guid(resourceId('Microsoft.Storage/storageAccounts/blobServices/containers', 'swexampleapprovalstate', 'default', 'tfstate'), resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', 'id-switchyard-infra-bootstrap-uksouth'), parameters('approvalBlobCustodianRoleDefinitionId'))]",
+              "properties": {
+                "principalId": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', 'id-switchyard-infra-bootstrap-uksouth'), '2023-01-31').principalId]",
+                "principalType": "ServicePrincipal",
+                "roleDefinitionId": "[parameters('approvalBlobCustodianRoleDefinitionId')]"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', 'id-switchyard-infra-bootstrap-uksouth')]",
+                "[resourceId('Microsoft.Storage/storageAccounts/blobServices/containers', 'swexampleapprovalstate', 'default', 'tfstate')]"
+              ]
+            },
+            {
+              "type": "Microsoft.Authorization/roleAssignments",
+              "apiVersion": "2022-04-01",
+              "scope": "[resourceId('Microsoft.Storage/storageAccounts/blobServices/containers', 'swexampleapprovalstate', 'default', 'apply-control')]",
+              "name": "[guid(resourceId('Microsoft.Storage/storageAccounts/blobServices/containers', 'swexampleapprovalstate', 'default', 'apply-control'), resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', 'id-switchyard-infra-bootstrap-uksouth'), parameters('approvalBlobCustodianRoleDefinitionId'))]",
+              "properties": {
+                "principalId": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', 'id-switchyard-infra-bootstrap-uksouth'), '2023-01-31').principalId]",
+                "principalType": "ServicePrincipal",
+                "roleDefinitionId": "[parameters('approvalBlobCustodianRoleDefinitionId')]"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Storage/storageAccounts/blobServices/containers', 'swexampleapprovalstate', 'default', 'apply-control')]",
+                "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', 'id-switchyard-infra-bootstrap-uksouth')]"
+              ]
+            },
+            {
+              "type": "Microsoft.Authorization/roleAssignments",
+              "apiVersion": "2022-04-01",
+              "scope": "[resourceId('Microsoft.Storage/storageAccounts/blobServices/containers', 'swexampleapprovalreceipt', 'default', 'plan-receipts')]",
+              "name": "[guid(resourceId('Microsoft.Storage/storageAccounts/blobServices/containers', 'swexampleapprovalreceipt', 'default', 'plan-receipts'), resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', 'id-switchyard-infra-bootstrap-uksouth'), parameters('approvalBlobCustodianRoleDefinitionId'))]",
+              "properties": {
+                "principalId": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', 'id-switchyard-infra-bootstrap-uksouth'), '2023-01-31').principalId]",
+                "principalType": "ServicePrincipal",
+                "roleDefinitionId": "[parameters('approvalBlobCustodianRoleDefinitionId')]"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', 'id-switchyard-infra-bootstrap-uksouth')]",
+                "[resourceId('Microsoft.Storage/storageAccounts/blobServices/containers', 'swexampleapprovalreceipt', 'default', 'plan-receipts')]"
+              ]
+            }
+          ],
+          "outputs": {
+            "stateResourceGroupId": {
+              "type": "string",
+              "value": "[resourceGroup().id]"
+            },
+            "stateStorageAccountId": {
+              "type": "string",
+              "value": "[resourceId('Microsoft.Storage/storageAccounts', 'swexampleapprovalstate')]"
+            },
+            "receiptStorageAccountId": {
+              "type": "string",
+              "value": "[resourceId('Microsoft.Storage/storageAccounts', 'swexampleapprovalreceipt')]"
+            },
+            "plannerIdentityClientId": {
+              "type": "string",
+              "value": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', 'id-switchyard-infra-planner-uksouth'), '2023-01-31').clientId]"
+            },
+            "plannerIdentityPrincipalId": {
+              "type": "string",
+              "value": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', 'id-switchyard-infra-planner-uksouth'), '2023-01-31').principalId]"
+            },
+            "foundationIdentityClientId": {
+              "type": "string",
+              "value": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', 'id-switchyard-infra-foundation-uksouth'), '2023-01-31').clientId]"
+            },
+            "foundationIdentityPrincipalId": {
+              "type": "string",
+              "value": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', 'id-switchyard-infra-foundation-uksouth'), '2023-01-31').principalId]"
+            },
+            "bootstrapIdentityClientId": {
+              "type": "string",
+              "value": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', 'id-switchyard-infra-bootstrap-uksouth'), '2023-01-31').clientId]"
+            },
+            "bootstrapIdentityPrincipalId": {
+              "type": "string",
+              "value": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', 'id-switchyard-infra-bootstrap-uksouth'), '2023-01-31').principalId]"
+            }
+          }
+        }
+      },
+      "dependsOn": [
+        "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', guid(subscription().id, 'switchyard-infrastructure-approval-blob-custodian'))]",
+        "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', guid(subscription().id, 'switchyard-infrastructure-state-reader'))]",
+        "[subscriptionResourceId('Microsoft.Resources/resourceGroups', 'rg-switchyard-example-state')]"
+      ]
+    }
+  ],
+  "outputs": {
+    "activated": {
+      "type": "bool",
+      "value": "[variables('activationAllowed')]"
+    },
+    "stateResourceGroupId": {
+      "type": "string",
+      "value": "[if(variables('activationAllowed'), reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, 'rg-switchyard-example-state'), 'Microsoft.Resources/deployments', 'switchyard-approval-foundation-resources'), '2025-04-01').outputs.stateResourceGroupId.value, '')]"
+    },
+    "stateStorageAccountId": {
+      "type": "string",
+      "value": "[if(variables('activationAllowed'), reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, 'rg-switchyard-example-state'), 'Microsoft.Resources/deployments', 'switchyard-approval-foundation-resources'), '2025-04-01').outputs.stateStorageAccountId.value, '')]"
+    },
+    "receiptStorageAccountId": {
+      "type": "string",
+      "value": "[if(variables('activationAllowed'), reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, 'rg-switchyard-example-state'), 'Microsoft.Resources/deployments', 'switchyard-approval-foundation-resources'), '2025-04-01').outputs.receiptStorageAccountId.value, '')]"
+    },
+    "plannerIdentityClientId": {
+      "type": "string",
+      "value": "[if(variables('activationAllowed'), reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, 'rg-switchyard-example-state'), 'Microsoft.Resources/deployments', 'switchyard-approval-foundation-resources'), '2025-04-01').outputs.plannerIdentityClientId.value, '')]"
+    },
+    "plannerIdentityPrincipalId": {
+      "type": "string",
+      "value": "[if(variables('activationAllowed'), reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, 'rg-switchyard-example-state'), 'Microsoft.Resources/deployments', 'switchyard-approval-foundation-resources'), '2025-04-01').outputs.plannerIdentityPrincipalId.value, '')]"
+    },
+    "foundationIdentityClientId": {
+      "type": "string",
+      "value": "[if(variables('activationAllowed'), reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, 'rg-switchyard-example-state'), 'Microsoft.Resources/deployments', 'switchyard-approval-foundation-resources'), '2025-04-01').outputs.foundationIdentityClientId.value, '')]"
+    },
+    "foundationIdentityPrincipalId": {
+      "type": "string",
+      "value": "[if(variables('activationAllowed'), reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, 'rg-switchyard-example-state'), 'Microsoft.Resources/deployments', 'switchyard-approval-foundation-resources'), '2025-04-01').outputs.foundationIdentityPrincipalId.value, '')]"
+    },
+    "bootstrapIdentityClientId": {
+      "type": "string",
+      "value": "[if(variables('activationAllowed'), reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, 'rg-switchyard-example-state'), 'Microsoft.Resources/deployments', 'switchyard-approval-foundation-resources'), '2025-04-01').outputs.bootstrapIdentityClientId.value, '')]"
+    },
+    "bootstrapIdentityPrincipalId": {
+      "type": "string",
+      "value": "[if(variables('activationAllowed'), reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, 'rg-switchyard-example-state'), 'Microsoft.Resources/deployments', 'switchyard-approval-foundation-resources'), '2025-04-01').outputs.bootstrapIdentityPrincipalId.value, '')]"
+    },
+    "initialControlCreatorRoleDefinitionId": {
+      "type": "string",
+      "value": "[if(variables('activationAllowed'), subscriptionResourceId('Microsoft.Authorization/roleDefinitions', guid(subscription().id, 'switchyard-initial-control-creator')), '')]"
+    }
+  }
+}

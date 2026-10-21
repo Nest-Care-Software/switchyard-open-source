@@ -1,0 +1,65 @@
+name: Allocate a Switchyard runner
+
+on:
+  workflow_call:
+    inputs:
+      profile:
+        description: Approved Switchyard capability profile
+        required: true
+        type: string
+      backupChoice:
+        default: Keep going
+        description: Continue with the approved managed backup when Azure is unavailable
+        required: false
+        type: string
+    outputs:
+      runner_label:
+        description: Provider-appropriate runner label
+        value: ${{ jobs.allocate.outputs.runner_label }}
+      allocation_id:
+        description: Switchyard allocation identifier
+        value: ${{ jobs.allocate.outputs.allocation_id }}
+
+permissions:
+  id-token: write
+
+jobs:
+  allocate:
+    name: Allocate runner
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    outputs:
+      runner_label: ${{ steps.allocate.outputs.runner_label }}
+      allocation_id: ${{ steps.allocate.outputs.allocation_id }}
+
+    steps:
+      - name: Validate called workflow identity
+        shell: bash
+        env:
+          CALLED_WORKFLOW_FILE_PATH: ${{ job.workflow_file_path }}
+          CALLED_WORKFLOW_REF: ${{ job.workflow_ref }}
+          CALLED_WORKFLOW_REPOSITORY: ${{ job.workflow_repository }}
+          CALLED_WORKFLOW_SHA: ${{ job.workflow_sha }}
+        run: |
+          set -euo pipefail
+          test "${CALLED_WORKFLOW_REPOSITORY}" = "example-org/switchyard"
+          test "${CALLED_WORKFLOW_FILE_PATH}" = ".github/workflows/allocate-runner.yml"
+          [[ "${CALLED_WORKFLOW_SHA}" =~ ^[0-9a-f]{40}$ ]]
+          test "${CALLED_WORKFLOW_REF}" = "${CALLED_WORKFLOW_REPOSITORY}/${CALLED_WORKFLOW_FILE_PATH}@${CALLED_WORKFLOW_SHA}"
+
+      - name: Allocate and poll
+        id: allocate
+        uses: example-org/switchyard/.github/actions/allocate@962f025fba27840b60e0fc06c5b5a7160451e82d
+        env:
+          SWITCHYARD_ALLOCATION_PROOF_AUDIENCE: ${{ vars.SWITCHYARD_ALLOCATION_PROOF_AUDIENCE }}
+          SWITCHYARD_ALLOCATOR_CHECK_RUN_ID: ${{ job.check_run_id }}
+          SWITCHYARD_API_AUDIENCE: ${{ vars.SWITCHYARD_API_AUDIENCE }}
+          SWITCHYARD_API_URL: ${{ vars.SWITCHYARD_API_URL }}
+          SWITCHYARD_BACKUP_CHOICE: ${{ inputs.backupChoice }}
+          SWITCHYARD_ENTRA_ASSERTION_AUDIENCE: api://AzureADTokenExchange
+          SWITCHYARD_ENTRA_CLIENT_ID: ${{ vars.SWITCHYARD_ENTRA_CLIENT_ID }}
+          SWITCHYARD_ENTRA_TENANT_ID: ${{ vars.SWITCHYARD_ENTRA_TENANT_ID }}
+          SWITCHYARD_PROFILE: ${{ inputs.profile }}
+          SWITCHYARD_REPOSITORY_ID: ${{ github.repository_id }}
+          SWITCHYARD_RUN_ATTEMPT: ${{ github.run_attempt }}
+          SWITCHYARD_RUN_ID: ${{ github.run_id }}

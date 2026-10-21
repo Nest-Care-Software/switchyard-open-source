@@ -1,0 +1,28 @@
+{
+  "name": "@switchyard/azure-ledger",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "files": [
+    "dist"
+  ],
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "npm run build --workspace @switchyard/core && tsc -p tsconfig.build.json",
+    "prepack": "npm run build",
+    "test": "npm run build --workspace @switchyard/core && tsc -p tsconfig.test.json && node --test .test-dist/test/*.test.js",
+    "typecheck": "npm run build --workspace @switchyard/core && tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@azure/data-tables": "13.3.2",
+    "@azure/identity": "4.13.2",
+    "@switchyard/core": "0.0.0"
+  }
+}

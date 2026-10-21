@@ -1,0 +1,21 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "switchyard-reporting",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-08-25",
+  "workers_dev": false,
+  "observability": {
+    "enabled": false
+  },
+  "triggers": {
+    "crons": ["15 2 * * *", "0 8 * * MON"]
+  },
+  "d1_databases": [
+    {
+      "binding": "REPORTING_DB",
+      "database_name": "switchyard-reporting",
+      "database_id": "00000000-0000-0000-0000-000000000000",
+      "migrations_dir": "migrations"
+    }
+  ]
+}

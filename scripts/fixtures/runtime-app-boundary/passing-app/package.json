@@ -1,0 +1,7 @@
+{
+  "name": "runtime-boundary-passing-fixture",
+  "private": true,
+  "dependencies": {
+    "@switchyard/azure-ledger": "0.0.0"
+  }
+}
