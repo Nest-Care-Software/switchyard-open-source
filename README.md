@@ -4,6 +4,8 @@ Switchyard routes trusted GitHub Actions jobs to a provider-appropriate runner
 while keeping provider policy out of application repositories. Each deployment
 serves one organisation.
 
+Available under the [MIT licence](LICENSE).
+
 This is a [sanitised source preview](docs/source-preview.md). Allocation remains disabled. All checked-in
 owner, repository and cloud identities are fictional examples. No deployment
 credentials or live activation evidence are included.

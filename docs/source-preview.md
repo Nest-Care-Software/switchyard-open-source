@@ -14,5 +14,4 @@ The source has fresh history. Deployment records, original commit attribution,
 issues, workflow logs and artefacts aren't part of this copy. Public vendor
 identifiers, dependency metadata and third-party action pins remain unchanged.
 
-No open-source licence has been selected for this private preview. Licence
-selection and public hosting are separate owner decisions.
+Switchyard is published under the [MIT licence](../LICENSE).
