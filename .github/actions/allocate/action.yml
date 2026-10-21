@@ -1,0 +1,12 @@
+name: Switchyard allocation client
+description: Request and poll one trusted Switchyard runner allocation
+
+outputs:
+  runner_label:
+    description: Provider-appropriate runner label
+  allocation_id:
+    description: Switchyard allocation identifier
+
+runs:
+  using: node24
+  main: index.mjs
